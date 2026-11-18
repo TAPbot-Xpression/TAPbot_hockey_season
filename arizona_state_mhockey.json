@@ -4,30 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T18:51:55Z",
+  "generated_at": "2026-11-18T19:57:53Z",
   "source_stats_url": "https://thesundevils.com/sports/ice-hockey/stats",
   "source_roster_url": "https://thesundevils.com/sports/ice-hockey/roster?view=list",
-  "site_style": "none",
-  "team_stats_status": "not_found",
-  "team_stats_missing": [
-    "goals_per_game",
-    "shots_per_game",
-    "shot_pct",
-    "pp_pct",
-    "pk_pct",
-    "pen_per_game",
-    "pim_per_game",
-    "faceoff_pct"
-  ],
+  "site_style": "Old Style (HTML tables)",
   "team_stats": {
-    "goals_per_game": "0.00",
-    "shots_per_game": "0.00",
-    "shot_pct": "0.0%",
-    "pp_pct": "0.0%",
-    "pk_pct": "0.0%",
-    "pen_per_game": "0.00",
-    "pim_per_game": "0.00",
-    "faceoff_pct": "0.0%"
+    "goals_per_game": "-",
+    "shots_per_game": "-",
+    "shot_pct": "-",
+    "pp_pct": "-",
+    "pk_pct": "-",
+    "pen_per_game": "-",
+    "pim_per_game": "-",
+    "faceoff_pct": "-"
   },
   "players": []
 }
