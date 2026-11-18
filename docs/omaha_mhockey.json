@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:05:01Z",
+  "generated_at": "2026-11-18T21:22:37Z",
   "source_stats_url": "https://omahamavs.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://omahamavs.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
@@ -405,7 +405,7 @@
       "sv": "271",
       "sv_pct": ".925",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "3-4-1",
       "min": "486:20"
     },
     {
@@ -420,7 +420,7 @@
       "sv": "58",
       "sv_pct": ".906",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "1-1-0",
       "min": "118:15"
     },
     {

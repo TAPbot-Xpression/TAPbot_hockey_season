@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:04:57Z",
+  "generated_at": "2026-11-18T21:22:29Z",
   "source_stats_url": "https://scsuhuskies.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://scsuhuskies.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
@@ -422,7 +422,7 @@
       "sv": "244",
       "sv_pct": ".914",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "2-5-1",
       "min": "487:19"
     },
     {
@@ -437,7 +437,7 @@
       "sv": "87",
       "sv_pct": ".906",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "1-2-0",
       "min": "176:46"
     }
   ]

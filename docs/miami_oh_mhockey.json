@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:04:57Z",
+  "generated_at": "2026-11-18T21:22:29Z",
   "source_stats_url": "https://miamiredhawks.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://miamiredhawks.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
@@ -439,7 +439,7 @@
       "sv": "29",
       "sv_pct": ".935",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "1-0-0",
       "min": "82:18"
     },
     {
@@ -454,7 +454,7 @@
       "sv": "203",
       "sv_pct": ".902",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "7-4-0",
       "min": "631:17"
     }
   ]

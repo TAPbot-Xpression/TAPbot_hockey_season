@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:04:49Z",
+  "generated_at": "2026-11-18T21:22:20Z",
   "source_stats_url": "https://denverpioneers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://denverpioneers.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
@@ -403,7 +403,7 @@
       "sv": "107",
       "sv_pct": ".939",
       "sho": "1",
-      "w_l_t": "0-0-0",
+      "w_l_t": "5-0-0",
       "min": "299:56"
     },
     {
@@ -418,7 +418,7 @@
       "sv": "155",
       "sv_pct": ".906",
       "sho": "0",
-      "w_l_t": "0-0-0",
+      "w_l_t": "4-2-1",
       "min": "413:48"
     }
   ]
