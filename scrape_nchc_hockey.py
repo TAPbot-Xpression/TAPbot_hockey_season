@@ -4,16 +4,27 @@ scrape_nchc_hockey.py
 NCHC Men's Hockey player season stats + team stats scraper.
 
 Key Updates:
-1. Goaltender Record Parsing:
-   - Accurately captures separate 'W', 'L', and 'T' columns from the Goaltender stats table
-     and compiles them into 'W-L-T' (e.g., 3-3-0 or 7-2-1).
-   - Also supports composite 'W-L-T' / 'RECORD' columns if present.
-2. Output Directory:
-   - Exclusively writes JSON files to the 'docs/' directory (docs/<slug>.json).
-   - No longer generates redundant JSON files in the root directory.
-3. Non-Conference Standardization:
-   - Guarantees any non-conference team defined in non_conf_config.json is saved as
-     'docs/non_conf_mhockey.json' for seamless integration with index.html.
+1. Team Stats Tab Selection (New Style Sidearm):
+   - Clicks the 'Team Stats' tab (<button data-test-id="s-tab__link"> Team Stats </button>)
+     to load the official team summary table.
+2. Section-Scoped Team Stats Extraction:
+   - [Shots Group]:
+       * Goals Per Game -> goals_per_game (e.g. 2.5)
+       * Shot Percentage -> shot_pct (e.g. 8.3%)
+       * Shots Per Game -> shots_per_game (e.g. 30.2)
+   - [Power Plays Group]:
+       * Conversion Percentage (Home) -> pp_pct (e.g. 22.2%)
+       * Conversion Percentage (Opponent) -> inverted to Home PK% (1.000 - 0.235 = 76.5%) -> pk_pct
+   - [Penalties Group]:
+       * Per Game -> pen_per_game (e.g. 4.6)
+       * Minutes Per Game -> pim_per_game (e.g. 12.5)
+   - [Faceoffs Group]:
+       * Percentage -> faceoff_pct (e.g. 52.0%)
+3. Goaltender Record:
+   - Parses individual 'W', 'L', and 'T' columns into 'W-L-T' format (e.g., 3-3-0).
+4. Output Directory:
+   - Exclusively saves JSON files to 'docs/<slug>.json'.
+   - Non-conference opponent is strictly saved as 'docs/non_conf_mhockey.json'.
 """
 
 from __future__ import annotations
@@ -204,7 +215,6 @@ def clean_w_l_t(val: Any) -> str:
     if val is None:
         return "0-0-0"
     s = str(val).strip().replace("–", "-").replace("—", "-")
-    # Match standard format like 3-3-0 or 7-2
     m = re.match(r"^(\d+)\s*-\s*(\d+)(?:\s*-\s*(\d+))?$", s)
     if m:
         w = int(m.group(1))
@@ -247,7 +257,6 @@ def load_non_conf_config() -> List[Dict[str, Any]]:
             for key, info in cfg.items():
                 if isinstance(info, dict) and info.get("stats_url"):
                     name = info.get("name") or "Non-Conf Opponent"
-                    # Strictly ensure slug is non_conf_mhockey for web dashboard
                     teams.append({
                         "name": name,
                         "slug": "non_conf_mhockey",
@@ -294,7 +303,6 @@ async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> 
         html = await page.content()
         soup = BeautifulSoup(html, "html.parser")
 
-        # Parse table rows (Print Roster)
         for row in soup.find_all("tr"):
             cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
             if len(cells) < 3:
@@ -316,7 +324,6 @@ async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> 
             if name_cand:
                 _add_roster(roster_lookup, name_cand, num, pos, yr)
 
-        # Parse sidearm card items (List View)
         for card in soup.select('[class*="roster-player"], [class*="s-person-card"]'):
             name_el = card.select_one('[class*="player-name"], [class*="name"] a, a[href*="/roster/"]')
             if not name_el:
@@ -395,7 +402,6 @@ def map_goalie_header(header_text: str) -> Optional[str]:
         return "sv_pct"
     if hk in ("SHO", "SO", "SHUTOUTS"):
         return "sho"
-    # Separate W, L, T columns
     if hk in ("W", "WIN", "WINS"):
         return "w"
     if hk in ("L", "LOSS", "LOSSES"):
@@ -503,12 +509,10 @@ def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
             raw_num = cells[num_idx] if num_idx is not None and num_idx < len(cells) else (cells[0] if cells[0].isdigit() else "")
 
-            # GP-GS formatting
             gp_val = cells[mapping["gp"]] if "gp" in mapping and mapping["gp"] < len(cells) else "0"
             gs_val = cells[mapping["gs"]] if "gs" in mapping and mapping["gs"] < len(cells) else "0"
             gp_gs_str = cells[mapping["gp_gs"]] if "gp_gs" in mapping and mapping["gp_gs"] < len(cells) else f"{gp_val}-{gs_val}"
 
-            # W-L-T record formatting from individual W, L, T columns or composite column
             if "w" in mapping and "l" in mapping:
                 w_val = clean_stat_int(cells[mapping["w"]]) if mapping["w"] < len(cells) else "0"
                 l_val = clean_stat_int(cells[mapping["l"]]) if mapping["l"] < len(cells) else "0"
@@ -538,95 +542,86 @@ def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
     return goalies
 
-# ── Section-Aware Team Stats Parser ──────────────────────────────────────────
+# ── Section-Scoped Team Stats Parser ─────────────────────────────────────────
 def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
     found: Dict[str, str] = {}
     current_section = ""
 
     for table in soup.find_all("table"):
-        heading = table.find_previous(["h2", "h3", "h4", "caption"])
-        if heading:
-            h_text = heading.get_text(" ", strip=True).upper()
-            if "POWER PLAY" in h_text:
-                current_section = "POWER_PLAY"
-            elif "PENALT" in h_text:
-                current_section = "PENALTIES"
-            elif "FACEOFF" in h_text:
-                current_section = "FACEOFFS"
-            elif "GOAL" in h_text:
-                current_section = "GOALS"
-            elif "SHOT" in h_text:
-                current_section = "SHOTS"
-
+        # Check table headers and sub-headers for section scope
         for row in table.find_all("tr"):
+            th_cells = row.find_all("th")
+            if th_cells:
+                th_text = " ".join(c.get_text(" ", strip=True) for c in th_cells).upper()
+                if "SHOT" in th_text:
+                    current_section = "SHOTS"
+                    continue
+                elif "POWER PLAY" in th_text:
+                    current_section = "POWER_PLAYS"
+                    continue
+                elif "PENALT" in th_text:
+                    current_section = "PENALTIES"
+                    continue
+                elif "FACEOFF" in th_text:
+                    current_section = "FACEOFFS"
+                    continue
+                elif "GOAL BREAKDOWN" in th_text or "GOAL" in th_text:
+                    current_section = "GOALS"
+                    continue
+
             cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
             if len(cells) < 2:
                 continue
 
             label = cells[0].strip().lower()
-            val_team = cells[1].strip() if len(cells) > 1 else ""
+            val_home = cells[1].strip() if len(cells) > 1 else ""
             val_opp = cells[2].strip() if len(cells) > 2 else ""
 
-            if "power play" in label:
-                current_section = "POWER_PLAY"
-            elif "penalt" in label:
-                current_section = "PENALTIES"
-            elif "faceoff" in label:
-                current_section = "FACEOFFS"
-            elif "goals" in label:
-                current_section = "GOALS"
-            elif "shots" in label:
-                current_section = "SHOTS"
-
-            # 1. Power Play Conversion % & Opponent PP Kill %
-            if "conversion percentage" in label or (current_section == "POWER_PLAY" and "percentage" in label):
-                if val_team:
-                    pp_val = _f(val_team)
-                    if pp_val is not None:
-                        if pp_val <= 1.0:
-                            pp_val *= 100.0
-                        found["pp_pct"] = f"{pp_val:.1f}%"
-                if val_opp:
-                    opp_float = _f(val_opp)
-                    if opp_float is not None:
-                        if opp_float > 1.0:
-                            opp_float /= 100.0
-                        pk_val = (1.0 - opp_float) * 100.0
-                        found["pk_pct"] = f"{pk_val:.1f}%"
-
-            # 2. Penalties Per Game (Pen/G)
-            if ("per game" in label or "pen/g" in label or "penalties per game" in label) and current_section == "PENALTIES":
-                if val_team and "pen_per_game" not in found:
-                    found["pen_per_game"] = val_team
-
-            # 3. Penalty Minutes Per Game (PIM/G)
-            if ("minutes per game" in label or "pim/g" in label or "minutes/game" in label) and current_section == "PENALTIES":
-                if val_team and "pim_per_game" not in found:
-                    found["pim_per_game"] = val_team
-
-            # 4. Faceoff %
-            if ("percentage" in label or "faceoff %" in label or "pct" in label) and current_section == "FACEOFFS":
-                if val_team and "faceoff_pct" not in found:
-                    f_val = _f(val_team)
-                    if f_val is not None:
-                        if f_val <= 1.0:
-                            f_val *= 100.0
-                        found["faceoff_pct"] = f"{f_val:.1f}%"
-
-            # 5. Goals & Shots Per Game & Shot %
-            if ("per game" in label or "goals/game" in label) and current_section == "GOALS":
-                if val_team and "goals_per_game" not in found:
-                    found["goals_per_game"] = val_team
-            if ("per game" in label or "shots/game" in label) and current_section == "SHOTS":
-                if val_team and "shots_per_game" not in found:
-                    found["shots_per_game"] = val_team
-            if ("shot percentage" in label or "shot pct" in label or "percentage" in label) and current_section == "SHOTS":
-                if val_team and "shot_pct" not in found:
-                    s_val = _f(val_team)
+            # 1. Under Shots Group: Goals Per Game, Shot Percentage, Shots Per Game
+            if current_section == "SHOTS":
+                if ("goals per game" in label or "goals/game" in label) and "goals_per_game" not in found:
+                    found["goals_per_game"] = val_home
+                elif ("shot percentage" in label or "shot pct" in label or "shot %" in label) and "shot_pct" not in found:
+                    s_val = _f(val_home)
                     if s_val is not None:
                         if s_val <= 1.0:
                             s_val *= 100.0
                         found["shot_pct"] = f"{s_val:.1f}%"
+                elif ("shots per game" in label or "shots/game" in label) and "shots_per_game" not in found:
+                    found["shots_per_game"] = val_home
+
+            # 2. Under Power Plays Group: Conversion Percentage (Home PP% and Opponent inverted PK%)
+            elif current_section == "POWER_PLAYS":
+                if "conversion percentage" in label or "percentage" in label or "pp pct" in label:
+                    if val_home and "pp_pct" not in found:
+                        pp_val = _f(val_home)
+                        if pp_val is not None:
+                            if pp_val <= 1.0:
+                                pp_val *= 100.0
+                            found["pp_pct"] = f"{pp_val:.1f}%"
+                    if val_opp and "pk_pct" not in found:
+                        opp_float = _f(val_opp)
+                        if opp_float is not None:
+                            if opp_float > 1.0:
+                                opp_float /= 100.0
+                            pk_val = (1.0 - opp_float) * 100.0
+                            found["pk_pct"] = f"{pk_val:.1f}%"
+
+            # 3. Under Penalties Group: Per Game and Minutes Per Game
+            elif current_section == "PENALTIES":
+                if (label == "per game" or "pen/g" in label or "penalties per game" in label) and "pen_per_game" not in found:
+                    found["pen_per_game"] = val_home
+                elif ("minutes per game" in label or "pim/g" in label or "minutes/game" in label) and "pim_per_game" not in found:
+                    found["pim_per_game"] = val_home
+
+            # 4. Under Faceoffs Group: Percentage
+            elif current_section == "FACEOFFS":
+                if ("percentage" in label or "pct" in label or "faceoff" in label) and "faceoff_pct" not in found:
+                    f_val = _f(val_home)
+                    if f_val is not None:
+                        if f_val <= 1.0:
+                            f_val *= 100.0
+                        found["faceoff_pct"] = f"{f_val:.1f}%"
 
     result: Dict[str, str] = {}
     for k in TEAM_STAT_KEYS:
@@ -692,16 +687,13 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             except Exception:
                 pass
 
-            # 1. Parse Skaters Table (Default Active View)
+            # 1. Parse Skaters Table (Default Active View: Player Stats -> Overall -> Skaters)
             html_skaters = await page.content()
             soup_skaters = BeautifulSoup(html_skaters, "html.parser")
             skaters_list = parse_skaters_table(soup_skaters)
             raw_players.extend(skaters_list)
 
-            # 2. Parse Team Stats
-            team_stats = parse_team_stats(soup_skaters)
-
-            # 3. Switch Dropdown to Goaltenders (New Style Vue/Nuxt)
+            # 2. Switch Dropdown to Goaltenders (New Style Vue/Nuxt)
             try:
                 select_box = page.locator('button[data-test-id="s-select__box"]').filter(has_text=re.compile(r"Skaters|Goaltenders", re.I)).first
                 if await select_box.count() > 0:
@@ -719,10 +711,28 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             except Exception as e:
                 logger.debug(f"[{label}] Goaltenders dropdown interaction: {e}")
 
-            # If no goalies were found from dropdown, parse from initial page (Old Style)
+            # If no goalies were found from dropdown, check initial page (Old Style)
             if not any(p.get("is_goalie") for p in raw_players):
                 goalies_list = parse_goalies_table(soup_skaters)
                 raw_players.extend(goalies_list)
+
+            # 3. Navigate to Team Stats Tab (New Style)
+            try:
+                team_stats_tab = page.locator('button[data-test-id="s-tab__link"], button[role="tab"]').filter(has_text=re.compile(r"Team Stats", re.I)).first
+                if await team_stats_tab.count() > 0:
+                    await team_stats_tab.click()
+                    await page.wait_for_timeout(1200)
+                    html_team = await page.content()
+                    soup_team = BeautifulSoup(html_team, "html.parser")
+                    parsed_ts = parse_team_stats(soup_team)
+                    if any(v != "-" for v in parsed_ts.values()):
+                        team_stats = parsed_ts
+            except Exception as e:
+                logger.debug(f"[{label}] Team Stats tab navigation: {e}")
+
+            # Fallback to initial page soup if Team Stats tab was not clicked
+            if not team_stats or all(v == "-" for v in team_stats.values()):
+                team_stats = parse_team_stats(soup_skaters)
 
         except Exception as e:
             logger.error(f"[{label}] Error navigating stats page: {e}")
@@ -741,7 +751,6 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
 
             r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
 
-            # Strict Roster Gate: Discard unrostered match splits or label artifacts
             if roster_lookup and len(roster_lookup) >= MIN_ROSTER_ENTRIES and not r_info:
                 continue
 
