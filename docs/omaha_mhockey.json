@@ -4,19 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:22:37Z",
+  "generated_at": "2026-11-18T21:45:06Z",
   "source_stats_url": "https://omahamavs.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://omahamavs.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
   "team_stats": {
     "goals_per_game": "3.0",
     "shots_per_game": "28.1",
-    "shot_pct": "-",
-    "pp_pct": "49.8%",
-    "pk_pct": "49.8%",
-    "pen_per_game": "-",
-    "pim_per_game": "-",
-    "faceoff_pct": "-"
+    "shot_pct": "10.7%",
+    "pp_pct": "19.4%",
+    "pk_pct": "80.6%",
+    "pen_per_game": "5.1",
+    "pim_per_game": "12.9",
+    "faceoff_pct": "49.8%"
   },
   "players": [
     {

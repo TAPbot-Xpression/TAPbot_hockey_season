@@ -4,19 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:22:15Z",
+  "generated_at": "2026-11-18T21:44:47Z",
   "source_stats_url": "https://tommiesports.com/sports/mhockey/stats/2026-27",
   "source_roster_url": "https://tommiesports.com/sports/mhockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
   "team_stats": {
     "goals_per_game": "2.5",
     "shots_per_game": "30.2",
-    "shot_pct": "-",
-    "pp_pct": "52.0%",
-    "pk_pct": "52.0%",
-    "pen_per_game": "-",
-    "pim_per_game": "-",
-    "faceoff_pct": "-"
+    "shot_pct": "8.3%",
+    "pp_pct": "22.2%",
+    "pk_pct": "76.5%",
+    "pen_per_game": "4.6",
+    "pim_per_game": "12.5",
+    "faceoff_pct": "52.0%"
   },
   "players": [
     {

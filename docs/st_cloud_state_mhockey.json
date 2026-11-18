@@ -4,19 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:22:29Z",
+  "generated_at": "2026-11-18T21:45:00Z",
   "source_stats_url": "https://scsuhuskies.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://scsuhuskies.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
   "team_stats": {
     "goals_per_game": "2.1",
     "shots_per_game": "29.7",
-    "shot_pct": "-",
-    "pp_pct": "53.6%",
-    "pk_pct": "53.6%",
-    "pen_per_game": "-",
-    "pim_per_game": "-",
-    "faceoff_pct": "-"
+    "shot_pct": "7.0%",
+    "pp_pct": "27.3%",
+    "pk_pct": "75.7%",
+    "pen_per_game": "4.4",
+    "pim_per_game": "8.7",
+    "faceoff_pct": "53.6%"
   },
   "players": [
     {

@@ -4,19 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-18T21:22:20Z",
+  "generated_at": "2026-11-18T21:44:52Z",
   "source_stats_url": "https://denverpioneers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://denverpioneers.com/sports/mens-ice-hockey/roster/print",
   "site_style": "New Style (Vue dropdowns)",
   "team_stats": {
     "goals_per_game": "3.9",
     "shots_per_game": "35.2",
-    "shot_pct": "-",
-    "pp_pct": "52.7%",
-    "pk_pct": "52.7%",
-    "pen_per_game": "-",
-    "pim_per_game": "-",
-    "faceoff_pct": "-"
+    "shot_pct": "11.1%",
+    "pp_pct": "19.6%",
+    "pk_pct": "90.3%",
+    "pen_per_game": "4.1",
+    "pim_per_game": "11.3",
+    "faceoff_pct": "52.7%"
   },
   "players": [
     {
