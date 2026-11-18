@@ -208,6 +208,38 @@
       margin-top: 0.25rem;
     }
 
+    .theme-toggle-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 3px;
+      border-radius: 9999px;
+    }
+
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.4rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    .theme-btn.active {
+      background: var(--surface-2);
+      border: 1px solid var(--border-light);
+      color: var(--text);
+    }
+
     /* ── Team Selector Ribbon ────────────────────────────────────────────────── */
     .selector-block {
       margin-bottom: 1.75rem;
@@ -580,10 +612,10 @@
       background: transparent;
       border: none;
       color: var(--text-muted);
-      padding: 0.35rem 0.75rem;
+      padding: 0.38rem 0.95rem;
       border-radius: 6px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 700;
       cursor: pointer;
       transition: all 0.15s;
@@ -597,7 +629,7 @@
 
     .table-wrap { overflow-x: auto; }
 
-    /* ── Table Styling (Ordered: Number, Pos, Year, Player, Stats) ───────────── */
+    /* ── Table Styling ───────────────────────────────────────────────────────── */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -793,7 +825,7 @@
       font-size: 0.95rem;
     }
 
-    /* ── Footer & Dark/Light Switcher ────────────────────────────────────────── */
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
     footer {
       margin-top: 3.5rem;
       padding-top: 1.5rem;
@@ -813,50 +845,28 @@
       text-decoration: none;
       font-weight: 700;
     }
-
-    .theme-toggle-wrap {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 3px;
-      border-radius: 9999px;
-    }
-
-    .theme-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      padding: 0.35rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-family: inherit;
-      transition: all 0.15s;
-    }
-
-    .theme-btn.active {
-      background: var(--surface-2);
-      border: 1px solid var(--border-light);
-      color: var(--text);
-    }
   </style>
 </head>
 <body data-theme="st_thomas_mhockey" data-color-scheme="dark">
 
 <div class="container">
 
-  <!-- Header -->
+  <!-- Header with Theme Switcher at Top -->
   <header>
     <div class="wordmark">
       <span class="wordmark-eyebrow" id="eyebrowText">2026-27 Season</span>
       <h1 id="pageTitle">NCHC Men's Hockey Season Stats</h1>
       <div class="meta" id="metaBar">Loading data…</div>
+    </div>
+
+    <!-- Top Theme Switcher -->
+    <div class="theme-toggle-wrap">
+      <button id="btnThemeDark" class="theme-btn active" onclick="setColorScheme('dark')">
+        <span>🌙 Dark</span>
+      </button>
+      <button id="btnThemeLight" class="theme-btn" onclick="setColorScheme('light')">
+        <span>☀️ Light</span>
+      </button>
     </div>
   </header>
 
@@ -889,7 +899,7 @@
     No player found with that jersey number or name on this roster.
   </div>
 
-  <!-- Player Spotlight Card (Rebuilt to match basketball design) -->
+  <!-- Player Spotlight Card -->
   <div class="spotlight-card" id="spotlightCard">
     <div class="spotlight-header">
       <div class="jersey-badge" id="spotJersey">—</div>
@@ -925,16 +935,14 @@
         </div>
       </div>
 
-      <!-- Filter tabs -->
+      <!-- Filter tabs: Skaters & Goaltenders -->
       <div class="filter-tabs">
-        <button class="filter-btn active" data-filter="ALL" onclick="setFilter('ALL', this)">All</button>
-        <button class="filter-btn" data-filter="F" onclick="setFilter('F', this)">F</button>
-        <button class="filter-btn" data-filter="D" onclick="setFilter('D', this)">D</button>
-        <button class="filter-btn" data-filter="G" onclick="setFilter('G', this)">G</button>
+        <button class="filter-btn active" data-filter="SKATERS" onclick="setFilter('SKATERS', this)">Skaters</button>
+        <button class="filter-btn" data-filter="GOALIES" onclick="setFilter('GOALIES', this)">Goaltenders</button>
       </div>
     </div>
 
-    <!-- Table content with Player Number, Pos, Year, Player Name, Stats -->
+    <!-- Table content -->
     <div class="table-wrap">
       <table id="statsTable">
         <thead id="tableHead"></thead>
@@ -974,19 +982,13 @@
     </div>
   </div>
 
-  <!-- Footer with Dark/Light Toggle -->
+  <!-- Footer with Updated Repository Link -->
   <footer>
-    <a href="https://github.com/TAPbot-Xpression/TAP_basketball_seasonstats" target="_blank" rel="noopener noreferrer">
+    <a href="https://github.com/TAPbot-Xpression/TAPbot_hockey_season" target="_blank" rel="noopener noreferrer">
       TAPbot · St. Thomas Athletics · Broadcast Production Tool
     </a>
-
-    <div class="theme-toggle-wrap">
-      <button id="btnThemeDark" class="theme-btn active" onclick="setColorScheme('dark')">
-        <span>🌙 Dark</span>
-      </button>
-      <button id="btnThemeLight" class="theme-btn" onclick="setColorScheme('light')">
-        <span>☀️ Light</span>
-      </button>
+    <div style="font-size:0.82rem; color:var(--text-muted);">
+      NCHC Men's Ice Hockey Statistics
     </div>
   </footer>
 
@@ -1109,8 +1111,8 @@
     { key: 'faceoff_pct',    label: 'FO%',       desc: 'Faceoff Percentage',         asc: false }
   ];
 
-  // ── Table Column Definition ────────────────────────────────────────────────
-  const STAT_COLS = [
+  // ── Table Column Definitions ───────────────────────────────────────────────
+  const SKATER_COLS = [
     { key: 'gp',     label: 'GP' },
     { key: 'g',      label: 'G' },
     { key: 'a',      label: 'A' },
@@ -1123,12 +1125,23 @@
     { key: 'pn_pim', label: 'PN-PIM' }
   ];
 
+  const GOALIE_COLS = [
+    { key: 'gp_gs',  label: 'GP-GS' },
+    { key: 'ga',     label: 'GA' },
+    { key: 'gaa',    label: 'GAA' },
+    { key: 'sv',     label: 'SV' },
+    { key: 'sv_pct', label: 'SV%' },
+    { key: 'sho',    label: 'SHO' },
+    { key: 'w_l_t',  label: 'W-L-T' },
+    { key: 'min',    label: 'MIN' }
+  ];
+
   let CURRENT_TEAM = 'st_thomas_mhockey';
   let RAW_DATA = null;
   let PLAYERS = [];
   let sortCol = 'pts';
   let sortDir = -1;
-  let currentFilter = 'ALL';
+  let currentFilter = 'SKATERS';
   let searchNum = '';
   let RANKS = {};
   let LOAD_TOKEN = 0;
@@ -1202,7 +1215,7 @@
       PLAYERS = (data.players || []).map(p => ({
         name:      p.name || '—',
         number:    p.number !== undefined && p.number !== null ? String(p.number) : '',
-        position:  p.position || 'F',
+        position:  p.position || (p.is_goalie === 'true' ? 'G' : 'F'),
         year:      p.year || '—',
         is_goalie: p.is_goalie === 'true' || p.position === 'G',
         gp:        p.gp || '0',
@@ -1216,11 +1229,12 @@
         gwg:       p.gwg || '0',
         pn_pim:    p.pn_pim || '0-0',
         // Goalie stats
-        gp_gs:     p.gp_gs || '0',
+        gp_gs:     p.gp_gs || '0-0',
         ga:        p.ga || '0',
         gaa:       p.gaa || '0.00',
         sv:        p.sv || '0',
         sv_pct:    p.sv_pct || '.000',
+        sho:       p.sho || '0',
         w_l_t:     p.w_l_t || '0-0-0',
         min:       p.min || '0:00'
       }));
@@ -1263,8 +1277,9 @@
   // ── Calculate Ranks for Top 3 Badges ─────────────────────────────────────────
   function calculateRanks() {
     RANKS = {};
+    const skaters = PLAYERS.filter(p => !p.is_goalie);
     ['pts', 'g', 'a', 'blk', 'sh', 'ppg'].forEach(key => {
-      const vals = PLAYERS.map(p => parseStat(p[key])).filter(v => v > 0);
+      const vals = skaters.map(p => parseStat(p[key])).filter(v => v > 0);
       const distinct = [...new Set(vals)].sort((a, b) => b - a);
       RANKS[key] = { 1: distinct[0], 2: distinct[1], 3: distinct[2] };
     });
@@ -1281,30 +1296,29 @@
     return null;
   }
 
-  // ── Render Player Table (Ordered: Number, Pos, Year, Player, Stats) ──────────
+  // ── Render Player Table ─────────────────────────────────────────────────────
   function renderTable() {
     const head = document.getElementById('tableHead');
     const body = document.getElementById('tableBody');
+    const isGoalieView = currentFilter === 'GOALIES';
+    const activeCols = isGoalieView ? GOALIE_COLS : SKATER_COLS;
 
     head.innerHTML = `<tr>
       <th class="col-center no-sort" style="width:55px;">#</th>
       <th class="col-center no-sort" style="width:55px;">Pos</th>
       <th class="col-center no-sort" style="width:55px;">Yr</th>
       <th class="col-left no-sort">Player</th>
-      ${STAT_COLS.map(c => `
+      ${activeCols.map(c => `
         <th onclick="sortBy('${c.key}')" class="${sortCol === c.key ? 'sorted' : ''}">
           ${c.label}${sortCol === c.key ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
         </th>
       `).join('')}
     </tr>`;
 
-    let filtered = [...PLAYERS];
-    if (currentFilter !== 'ALL') {
-      filtered = filtered.filter(p => (p.position || '').toUpperCase() === currentFilter);
-    }
+    let filtered = PLAYERS.filter(p => isGoalieView ? p.is_goalie : !p.is_goalie);
 
     if (!filtered.length) {
-      body.innerHTML = `<tr><td colspan="14" class="empty">No roster data matching the current filter.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="${activeCols.length + 4}" class="empty">No ${isGoalieView ? 'goaltenders' : 'skaters'} found on this roster.</td></tr>`;
       return;
     }
 
@@ -1312,9 +1326,20 @@
       filtered.sort((a, b) => {
         let av = a[sortCol];
         let bv = b[sortCol];
+
         if (sortCol === 'pn_pim') {
           av = parseStat((av || '0-0').split('-')[1]);
           bv = parseStat((bv || '0-0').split('-')[1]);
+        } else if (sortCol === 'gp_gs') {
+          av = parseStat((av || '0-0').split('-')[0]);
+          bv = parseStat((bv || '0-0').split('-')[0]);
+        } else if (sortCol === 'min') {
+          const parseMin = (s) => {
+            const parts = String(s || '0').split(':');
+            return (parseFloat(parts[0]) || 0) * 60 + (parseFloat(parts[1]) || 0);
+          };
+          av = parseMin(av);
+          bv = parseMin(bv);
         } else {
           av = parseStat(av);
           bv = parseStat(bv);
@@ -1332,7 +1357,7 @@
         <td class="col-pos">${esc(r.position) || '—'}</td>
         <td class="col-yr">${esc(r.year) || '—'}</td>
         <td class="col-player" title="Click to view player spotlight" onclick="displayPlayerCard(${origIdx})">${esc(r.name)}</td>
-        ${STAT_COLS.map(c => `<td>${esc(r[c.key]) || '0'}</td>`).join('')}
+        ${activeCols.map(c => `<td>${esc(r[c.key]) || (c.key === 'pn_pim' ? '0-0' : '0')}</td>`).join('')}
       </tr>`;
     }).join('');
   }
@@ -1342,7 +1367,7 @@
       sortDir *= -1;
     } else {
       sortCol = col;
-      sortDir = -1;
+      sortDir = col === 'gaa' ? 1 : -1; // Lower GAA is better by default
     }
     renderTable();
     if (searchNum) highlightRow(searchNum);
@@ -1352,10 +1377,20 @@
     currentFilter = filter;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+
+    // Reset sort default based on view
+    if (filter === 'GOALIES') {
+      sortCol = 'sv';
+      sortDir = -1;
+    } else {
+      sortCol = 'pts';
+      sortDir = -1;
+    }
+
     renderTable();
   }
 
-  // ── Render Player Spotlight Card (Matching Basketball Design) ───────────────
+  // ── Render Player Spotlight Card ───────────────────────────────────────────
   function renderPlayerSpotlight(player) {
     const notFound = document.getElementById('notFound');
     const card     = document.getElementById('spotlightCard');
@@ -1374,30 +1409,21 @@
 
     document.getElementById('spotJersey').textContent = player.number || '—';
     document.getElementById('spotYr').textContent     = player.year || '—';
-    document.getElementById('spotPos').textContent    = player.position || '—';
+    document.getElementById('spotPos').textContent    = player.position || (player.is_goalie ? 'G' : 'F');
     document.getElementById('spotName').textContent   = player.name || '—';
     document.getElementById('spotSub').textContent    = `${currentTeamObj.name} · Men's Hockey`;
 
     const grid = document.getElementById('spotStatGrid');
 
     if (player.is_goalie) {
-      const goalieFields = [
-        { label: 'GP-GS', key: 'gp_gs' },
-        { label: 'GA',    key: 'ga' },
-        { label: 'GAA',   key: 'gaa' },
-        { label: 'SV',    key: 'sv' },
-        { label: 'SV%',   key: 'sv_pct' },
-        { label: 'W-L-T', key: 'w_l_t' },
-        { label: 'MIN',   key: 'min' }
-      ];
-      grid.innerHTML = goalieFields.map(c => `
+      grid.innerHTML = GOALIE_COLS.map(c => `
         <div class="stat-cell">
           <span class="stat-key">${c.label}</span>
           <span class="stat-val">${esc(player[c.key] || '—')}</span>
         </div>
       `).join('');
     } else {
-      grid.innerHTML = STAT_COLS.map(c => {
+      grid.innerHTML = SKATER_COLS.map(c => {
         const val = player[c.key] || '0';
         const rank = getRank(c.key, val);
         const rankClass = rank ? `rank-${rank}` : '';
