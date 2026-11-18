@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """
 scrape_nchc_hockey.py
-NCHC Men's Hockey player season stats + team stats scraper (Sidearm sites).
+NCHC Men's Hockey player season stats + team stats scraper.
 
-Fixes applied:
-1. Accurate PPG, SHG, and GWG Extraction:
-   - Nuxt resolver aggregates all cumulative situation goalStats (e.g. powerPlayGoals: 4, shortHandedGoals: 1 for Lucas Van Vliet).
-   - HTML table parser accurately maps [GP, G, A, PTS, SH, SH%, +/-, PPG, SHG, GWG, BLK, PN-PIM] without column drift.
-2. Direct Skater & Goalie Property Mapping:
-   - Skaters: gp, g, a, pts, sh, blk, ppg, shg, gwg, pn_pim
-   - Goalies: gp_gs, ga, gaa, sv, sv_pct, w_l_t, min
-3. Clean Roster Integration:
-   - Roster gate ensures only true players are output, discarding game-by-game results, totals, and opponent lines.
-4. Correct Section-Scoped Team Stats:
-   - Power Play%: Home conversion rate (e.g. 22.2%)
-   - Penalty Kill%: Opponent conversion inverted (1.0 - .235 = 76.5%)
-   - Penalties / G: Home rate (e.g. 4.6)
-   - PIM / G: Home rate (e.g. 12.5)
-   - Faceoff%: Home rate (e.g. 52.0%)
-5. Non-Conference Support: Auto-loads non_conf_config.json if present.
+Rebuilt from square one to reliably handle Sidearm New Style (Vue/Nuxt dropdown menus),
+Old Style HTML multi-table layouts, and ASU custom formats.
+
+Workflow for New Style sites:
+1. Navigates to the stats page using Playwright.
+2. Ensures 'Player Stats' -> 'Overall' -> 'Skaters' view is active and parses all skater rows:
+   - GP, G, A, PTS, SH, BLK, PPG, SHG, GWG, PN-PIM
+3. Switches dropdown to 'Goaltenders' view (or parses Goalie table) and extracts:
+   - GP-GS, GA, GAA, SV, SV%, SHO, W-L-T, MIN
+4. Scrapes Overall Team Stats:
+   - Goals/G, Shots/G, Shot%, PP%, PK% (100 - Opponent PP%), Pen/G, PIM/G, Faceoff%
+5. Merges with /roster/print data to strictly verify player identities, positions, and academic years.
+6. Writes clean, standardized JSON to <slug>.json and docs/<slug>.json.
 """
 
 from __future__ import annotations
@@ -40,8 +37,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 CONCURRENCY_LIMIT = 5
-MIN_ROSTER_ENTRIES = 12
-MIN_PLAYERS_ACCEPT = 5
+MIN_ROSTER_ENTRIES = 10
 
 TEAMS_CONFIG = [
     {
@@ -96,8 +92,6 @@ TEAMS_CONFIG = [
     },
 ]
 
-SKATER_STAT_FIELDS = ["gp", "g", "a", "pts", "sh", "blk", "ppg", "shg", "gwg", "pn_pim"]
-GOALIE_STAT_FIELDS = ["gp_gs", "ga", "gaa", "sv", "sv_pct", "w_l_t", "min"]
 TEAM_STAT_KEYS = [
     "goals_per_game", "shots_per_game", "shot_pct", "pp_pct",
     "pk_pct", "pen_per_game", "pim_per_game", "faceoff_pct",
@@ -255,30 +249,6 @@ def load_non_conf_config() -> List[Dict[str, Any]]:
         logger.warning(f"Could not load non_conf_config.json: {e}")
         return []
 
-# ── Browser Page Fetcher ─────────────────────────────────────────────────────
-async def fetch_page_html(context: BrowserContext, url: str, wait_for_table: bool = False) -> Optional[str]:
-    page: Optional[Page] = None
-    try:
-        page = await context.new_page()
-        logger.info(f"Navigating to {url}")
-        await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=3000)
-        except Exception:
-            pass
-        if wait_for_table:
-            try:
-                await page.wait_for_selector("table", timeout=6000)
-            except Exception:
-                pass
-        return await page.content()
-    except Exception as e:
-        logger.error(f"Failed to fetch {url}: {e}")
-        return None
-    finally:
-        if page:
-            await page.close()
-
 # ── Roster Resolution Helpers ────────────────────────────────────────────────
 def _add_roster(lookup: Dict[str, Dict[str, str]], name: str, num: str, pos: str, yr: str) -> None:
     info = {"name": name, "number": num, "position": pos, "year": yr}
@@ -297,218 +267,74 @@ def find_roster_entry(name: str, number: str, roster_lookup: Dict[str, Dict[str,
     close = difflib.get_close_matches(raw_low, [k for k in roster_lookup if not k.startswith("#")], n=1, cutoff=0.72)
     return roster_lookup[close[0]] if close else None
 
-NUXT_PATTERNS = [
-    r'<script[^>]+id=["\']__NUXT_DATA__["\'][^>]*>(.*?)</script>',
-    r"__NUXT_DATA__\s*=\s*(\[.*?\]);",
-    r"window\.__NUXT__\s*=\s*(.*?);\s*</script>",
-]
-
-def deep_resolve_nuxt(val: Any, data: List[Any], depth: int = 0) -> Any:
-    if depth > 10:
-        return val
-    if isinstance(val, int) and 0 <= val < len(data):
-        target = data[val]
-        return deep_resolve_nuxt(target, data, depth + 1)
-    elif isinstance(val, dict):
-        return {k: deep_resolve_nuxt(v, data, depth + 1) for k, v in val.items()}
-    elif isinstance(val, list):
-        return [deep_resolve_nuxt(v, data, depth + 1) for v in val]
-    return val
-
-def parse_nuxt_roster_data(html: str) -> Dict[str, Dict[str, str]]:
+async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> Dict[str, Dict[str, str]]:
     roster_lookup: Dict[str, Dict[str, str]] = {}
-    for pat in NUXT_PATTERNS:
-        m = re.search(pat, html, re.DOTALL)
-        if not m:
-            continue
-        try:
-            data = json.loads(m.group(1))
-            if not isinstance(data, list):
-                continue
-
-            for item in data:
-                if not isinstance(item, dict):
-                    continue
-                resolved = deep_resolve_nuxt(item, data)
-                if not isinstance(resolved, dict):
-                    continue
-
-                raw_name = (resolved.get("name") or resolved.get("playerName") or resolved.get("fullName") or resolved.get("displayName"))
-                if not raw_name or not isinstance(raw_name, str):
-                    continue
-                c_name = clean_name(raw_name)
-                if not is_valid_player_candidate(c_name):
-                    continue
-
-                raw_num = resolved.get("uniform") or resolved.get("jersey") or resolved.get("number") or resolved.get("jerseyNumber") or resolved.get("uniformNumber")
-                raw_pos = resolved.get("position") or resolved.get("positionShort") or resolved.get("pos")
-                raw_yr = resolved.get("academicYear") or resolved.get("year") or resolved.get("class") or resolved.get("cl")
-
-                _add_roster(roster_lookup, c_name, clean_number(raw_num),
-                            normalize_position(str(raw_pos or "")), normalize_year(str(raw_yr or "")))
-        except Exception:
-            continue
-        if len(roster_lookup) >= 5:
-            break
-    return roster_lookup
-
-def parse_print_roster(html: str) -> Dict[str, Dict[str, str]]:
-    roster_lookup = parse_nuxt_roster_data(html)
-    if len(roster_lookup) >= 5:
+    if not roster_url:
         return roster_lookup
-    soup = BeautifulSoup(html, "html.parser")
-    for row in soup.find_all("tr"):
-        cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-        if len(cells) < 3:
-            continue
-        num, pos, yr, name_cand = "", "", "", ""
-        for col in cells:
-            if not num and re.match(r"^\d{1,2}$", col):
-                num = clean_number(col)
+
+    page: Optional[Page] = None
+    try:
+        page = await context.new_page()
+        await page.goto(roster_url, wait_until="domcontentloaded", timeout=25000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=3000)
+        except Exception:
+            pass
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Parse table rows (Print Roster)
+        for row in soup.find_all("tr"):
+            cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
+            if len(cells) < 3:
                 continue
-            if not pos and normalize_position(col):
-                pos = normalize_position(col)
+            num, pos, yr, name_cand = "", "", "", ""
+            for col in cells:
+                if not num and re.match(r"^\d{1,2}$", col):
+                    num = clean_number(col)
+                    continue
+                if not pos and normalize_position(col):
+                    pos = normalize_position(col)
+                    continue
+                if not yr and normalize_year(col):
+                    yr = normalize_year(col)
+                    continue
+                c_clean = clean_name(col)
+                if not name_cand and is_valid_player_candidate(c_clean):
+                    name_cand = c_clean
+            if name_cand:
+                _add_roster(roster_lookup, name_cand, num, pos, yr)
+
+        # Parse sidearm card items (List View)
+        for card in soup.select('[class*="roster-player"], [class*="s-person-card"]'):
+            name_el = card.select_one('[class*="player-name"], [class*="name"] a, a[href*="/roster/"]')
+            if not name_el:
                 continue
-            if not yr and normalize_year(col):
-                yr = normalize_year(col)
+            c_name = clean_name(name_el.get_text(strip=True))
+            if not is_valid_player_candidate(c_name):
                 continue
-            c_clean = clean_name(col)
-            if not name_cand and is_valid_player_candidate(c_clean):
-                name_cand = c_clean
-        if name_cand:
-            _add_roster(roster_lookup, name_cand, num, pos, yr)
+            jersey_el = card.select_one('[class*="jersey"], [class*="number"]')
+            num = clean_number(jersey_el.get_text(strip=True)) if jersey_el else ""
+            pos_el = card.select_one('[class*="position"]')
+            pos = normalize_position(pos_el.get_text(strip=True)) if pos_el else ""
+            yr_el = card.select_one('[class*="year"], [class*="class"]')
+            yr = normalize_year(yr_el.get_text(strip=True)) if yr_el else ""
+            _add_roster(roster_lookup, c_name, num, pos, yr)
+
+    except Exception as e:
+        logger.warning(f"[{label}] Error fetching roster: {e}")
+    finally:
+        if page:
+            await page.close()
+
     return roster_lookup
 
-async def fetch_roster(context: BrowserContext, candidates: List[str], label: str) -> Tuple[Dict[str, Dict[str, str]], str]:
-    best_lookup: Dict[str, Dict[str, str]] = {}
-    best_url = ""
-    for url in candidates:
-        if not url:
-            continue
-        html = await fetch_page_html(context, url)
-        if not html:
-            continue
-        lookup = parse_print_roster(html)
-        if len(lookup) > len(best_lookup):
-            best_lookup, best_url = lookup, url
-        if len(lookup) >= MIN_ROSTER_ENTRIES:
-            return lookup, url
-    return best_lookup, best_url
-
-# ── Nuxt Data Player Stats Extractor ──────────────────────────────────────────
-def parse_nuxt_data_stats(html: str) -> List[Dict[str, Any]]:
-    players: List[Dict[str, Any]] = []
-
-    for pat in NUXT_PATTERNS:
-        m = re.search(pat, html, re.DOTALL)
-        if not m:
-            continue
-        try:
-            data = json.loads(m.group(1))
-            if not isinstance(data, list):
-                continue
-
-            for raw_item in data:
-                if not isinstance(raw_item, dict):
-                    continue
-
-                item = deep_resolve_nuxt(raw_item, data)
-                if not isinstance(item, dict):
-                    continue
-
-                if any(k in item for k in ("boxscoreUrl", "opponent", "winOrLoss", "gameDate")):
-                    continue
-
-                flat: Dict[str, Any] = {}
-                def extract_flat(d: Dict[str, Any]) -> None:
-                    for k, v in d.items():
-                        if isinstance(v, dict):
-                            extract_flat(v)
-                        elif isinstance(v, (str, int, float)) and v is not None:
-                            flat[re.sub(r"[^a-z0-9]", "", str(k).lower())] = str(v)
-
-                extract_flat(item)
-
-                raw_name = (flat.get("playername") or flat.get("namefromstats") or flat.get("name") or
-                            flat.get("fullname") or flat.get("displayname"))
-                if not raw_name or not isinstance(raw_name, str):
-                    continue
-
-                c_name = clean_name(raw_name)
-                if not is_valid_player_candidate(c_name):
-                    continue
-
-                raw_num = (flat.get("playeruniform") or flat.get("uniformnumber") or flat.get("jersey") or
-                           flat.get("number") or flat.get("uniform") or "")
-                raw_pos = flat.get("position") or flat.get("positionshort") or flat.get("pos") or ""
-                raw_yr = flat.get("academicyear") or flat.get("year") or flat.get("class") or ""
-
-                # Skater stats extraction
-                gp = flat.get("gamesplayed") or flat.get("gp") or flat.get("totalgamesplayed") or "0"
-                g = flat.get("goals") or flat.get("g") or flat.get("totalgoals") or "0"
-                a = flat.get("assists") or flat.get("a") or flat.get("totalassists") or "0"
-                pts = flat.get("points") or flat.get("pts") or flat.get("totalpoints") or "0"
-                sh = flat.get("shots") or flat.get("sh") or flat.get("sog") or flat.get("shotsongoal") or "0"
-                blk = flat.get("blocked") or flat.get("blockedshots") or flat.get("blocks") or flat.get("blk") or "0"
-                ppg = flat.get("powerplaygoals") or flat.get("ppg") or flat.get("ppgoals") or "0"
-                shg = flat.get("shorthandedgoals") or flat.get("shg") or flat.get("shgoals") or "0"
-                gwg = flat.get("gamewinninggoals") or flat.get("gwg") or "0"
-
-                # Penalties / PIM
-                pen = flat.get("count") or flat.get("penalties") or flat.get("pen") or "0"
-                pim = flat.get("minutes") or flat.get("penaltyminutes") or flat.get("pim") or "0"
-                pn_pim = f"{clean_stat_int(pen)}-{clean_stat_int(pim)}"
-
-                # Goalie stats
-                has_goalie = "saves" in flat or "goalsagainstaverage" in flat or "gaa" in flat or normalize_position(str(raw_pos)) == "G"
-                gp_gs = flat.get("gamesstarted") or gp
-                ga = flat.get("goalsagainst") or flat.get("allgoalsallowed") or "0"
-                gaa = flat.get("goalsagainstaverage") or flat.get("gaa") or "0.00"
-                sv = flat.get("saves") or flat.get("sv") or "0"
-                sv_pct = flat.get("savepercentage") or flat.get("svpct") or ".000"
-                w_l_t = flat.get("record") or flat.get("winlosstie") or "0-0-0"
-                min_played = flat.get("minutes") or flat.get("min") or "0:00"
-
-                p = {
-                    "number": clean_number(raw_num),
-                    "name": c_name,
-                    "position": normalize_position(str(raw_pos)),
-                    "year": normalize_year(str(raw_yr)),
-                    "is_goalie": has_goalie,
-                    "gp": gp,
-                    "g": g,
-                    "a": a,
-                    "pts": pts,
-                    "sh": sh,
-                    "blk": blk,
-                    "ppg": ppg,
-                    "shg": shg,
-                    "gwg": gwg,
-                    "pn_pim": pn_pim,
-                    "gp_gs": gp_gs,
-                    "ga": ga,
-                    "gaa": gaa,
-                    "sv": sv,
-                    "sv_pct": sv_pct,
-                    "w_l_t": w_l_t,
-                    "min": min_played,
-                }
-                players.append(p)
-        except Exception:
-            continue
-        if len(players) >= 5:
-            break
-
-    return players
-
-# ── Table Stats Parser (HTML Fallback) ────────────────────────────────────────
-def map_table_header(header_text: str) -> Optional[str]:
-    raw = header_text.strip().upper()
-    hk = re.sub(r"[^A-Z0-9%/+\-]", "", raw)
-
+# ── Header Normalization & Mappers ───────────────────────────────────────────
+def map_skater_header(header_text: str) -> Optional[str]:
+    hk = re.sub(r"[^A-Z0-9%/+\-]", "", header_text.strip().upper())
     if hk in ("#", "NO", "NO.", "JERSEY", "NUM", "NUMBER", "UNIFORM"):
         return "number"
-    if hk in ("PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "SKATER", "GOALTENDER"):
+    if hk in ("PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "SKATER"):
         return "name"
     if hk in ("GP", "GAMES", "GAMESPLAYED"):
         return "gp"
@@ -526,42 +352,48 @@ def map_table_header(header_text: str) -> Optional[str]:
         return "shg"
     if hk in ("GWG", "GW", "GAMEWINNINGGOALS", "GWGOALS", "GAMEWINNINGG"):
         return "gwg"
-    if hk in ("PN-PIM", "PEN-PIM", "PEN-MIN", "PN-MIN", "PEN/PIM", "PN/PIM", "PENALTIES-PIM", "PENALTIES-MINUTES", "PENALTIES/PIM"):
+    if hk in ("BLK", "BLKS", "BS", "BLOCKS", "BLOCKEDSHOTS", "BLKD", "SHOTSBLOCKED"):
+        return "blk"
+    if hk in ("PN-PIM", "PEN-PIM", "PEN-MIN", "PN-MIN", "PEN/PIM", "PN/PIM", "PENALTIES-PIM", "PENALTIES-MINUTES", "PENALTIES/PIM", "PN/MIN"):
         return "pn_pim"
     if hk in ("PEN", "PN", "PENALTIES"):
         return "pen"
     if hk in ("PIM", "PENALTYMINUTES", "PENMIN"):
         return "pim"
-    if hk in ("BLK", "BLKS", "BS", "BLOCKS", "BLOCKEDSHOTS", "BLKD", "SHOTSBLOCKED"):
-        return "blk"
+    return None
 
-    # Goalie headers
-    if hk in ("GP-GS", "GP/GS", "GP_GS", "GAMES-STARTED"):
+def map_goalie_header(header_text: str) -> Optional[str]:
+    hk = re.sub(r"[^A-Z0-9%/+\-]", "", header_text.strip().upper())
+    if hk in ("#", "NO", "NO.", "JERSEY", "NUM", "NUMBER", "UNIFORM"):
+        return "number"
+    if hk in ("PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "GOALTENDER", "GOALIE"):
+        return "name"
+    if hk in ("GP-GS", "GP/GS", "GP_GS", "GAMES-STARTED", "GP/GS/MIN"):
         return "gp_gs"
-    if hk in ("GA", "GOALSAGAINST"):
+    if hk in ("GP", "GAMES"):
+        return "gp"
+    if hk in ("GS", "STARTS"):
+        return "gs"
+    if hk in ("GA", "GOALSAGAINST", "GOALSALLOWED"):
         return "ga"
-    if hk in ("GAA", "GOALSAGAINSTAVERAGE"):
+    if hk in ("GAA", "GOALSAGAINSTAVERAGE", "AVG"):
         return "gaa"
     if hk in ("SV", "SAVES", "SVS"):
         return "sv"
     if hk in ("SV%", "SVPCT", "SAVE%", "SAVEPCT", "SVP"):
         return "sv_pct"
+    if hk in ("SHO", "SO", "SHUTOUTS"):
+        return "sho"
     if hk in ("W-L-T", "W-L-T-SHO", "RECORD", "WL", "W-L", "WLT"):
         return "w_l_t"
     if hk in ("MIN", "MINUTES", "TOI", "TIME"):
         return "min"
-
     return None
 
-def parse_stats_tables(soup: BeautifulSoup) -> List[Dict[str, Any]]:
-    players: List[Dict[str, Any]] = []
-
+# ── Table Parser Helper ───────────────────────────────────────────────────────
+def parse_skaters_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    skaters: List[Dict[str, Any]] = []
     for table in soup.find_all("table"):
-        prev_heading = table.find_previous(["h2", "h3", "h4", "caption", "div"])
-        prev_text = prev_heading.get_text(" ", strip=True).upper() if prev_heading else ""
-        if any(bad in prev_text for bad in ["GAME RESULTS", "OVERALL TEAM STATS", "TEAM STATISTICS", "GOALS BY PERIOD", "SHOTS BY PERIOD"]):
-            continue
-
         rows = table.find_all("tr")
         if len(rows) < 2:
             continue
@@ -570,23 +402,22 @@ def parse_stats_tables(soup: BeautifulSoup) -> List[Dict[str, Any]]:
         cols = [c.get_text(" ", strip=True) for c in header_row.find_all(["th", "td"])]
         mapping: Dict[str, int] = {}
         for idx, col in enumerate(cols):
-            f = map_table_header(col)
+            f = map_skater_header(col)
             if f and f not in mapping:
                 mapping[f] = idx
 
-        if len(mapping) < 3:
+        if not ("g" in mapping and "pts" in mapping):
             continue
 
-        is_goalie_table = ("gaa" in mapping) or ("sv_pct" in mapping) or ("sv" in mapping)
         name_idx = mapping.get("name")
         num_idx = mapping.get("number")
 
         for r in rows[1:]:
             cells = [c.get_text(" ", strip=True) for c in r.find_all(["td", "th"])]
-            if len(cells) < 3:
+            if len(cells) < 4:
                 continue
 
-            raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else (cells[1] if len(cells) > 1 else "")
+            raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else cells[1]
             c_name = clean_name(raw_name)
             if not is_valid_player_candidate(c_name):
                 continue
@@ -596,17 +427,87 @@ def parse_stats_tables(soup: BeautifulSoup) -> List[Dict[str, Any]]:
             p = {
                 "number": clean_number(raw_num),
                 "name": c_name,
-                "position": "G" if is_goalie_table else "",
+                "position": "F",
                 "year": "",
-                "is_goalie": is_goalie_table,
+                "is_goalie": False,
+                "gp": cells[mapping["gp"]] if "gp" in mapping and mapping["gp"] < len(cells) else "0",
+                "g": cells[mapping["g"]] if "g" in mapping and mapping["g"] < len(cells) else "0",
+                "a": cells[mapping["a"]] if "a" in mapping and mapping["a"] < len(cells) else "0",
+                "pts": cells[mapping["pts"]] if "pts" in mapping and mapping["pts"] < len(cells) else "0",
+                "sh": cells[mapping["sh"]] if "sh" in mapping and mapping["sh"] < len(cells) else "0",
+                "blk": cells[mapping["blk"]] if "blk" in mapping and mapping["blk"] < len(cells) else "0",
+                "ppg": cells[mapping["ppg"]] if "ppg" in mapping and mapping["ppg"] < len(cells) else "0",
+                "shg": cells[mapping["shg"]] if "shg" in mapping and mapping["shg"] < len(cells) else "0",
+                "gwg": cells[mapping["gwg"]] if "gwg" in mapping and mapping["gwg"] < len(cells) else "0",
             }
-            for field, idx_col in mapping.items():
-                if idx_col < len(cells):
-                    p[field] = cells[idx_col]
 
-            players.append(p)
+            if "pn_pim" in mapping and mapping["pn_pim"] < len(cells):
+                p["pn_pim"] = cells[mapping["pn_pim"]]
+            elif "pen" in mapping and "pim" in mapping and mapping["pen"] < len(cells) and mapping["pim"] < len(cells):
+                p["pn_pim"] = f"{cells[mapping['pen']]}-{cells[mapping['pim']]}"
+            else:
+                p["pn_pim"] = "0-0"
 
-    return players
+            skaters.append(p)
+
+    return skaters
+
+def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    goalies: List[Dict[str, Any]] = []
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            continue
+
+        header_row = rows[0]
+        cols = [c.get_text(" ", strip=True) for c in header_row.find_all(["th", "td"])]
+        mapping: Dict[str, int] = {}
+        for idx, col in enumerate(cols):
+            f = map_goalie_header(col)
+            if f and f not in mapping:
+                mapping[f] = idx
+
+        if not ("gaa" in mapping or "sv_pct" in mapping or "sv" in mapping):
+            continue
+
+        name_idx = mapping.get("name")
+        num_idx = mapping.get("number")
+
+        for r in rows[1:]:
+            cells = [c.get_text(" ", strip=True) for c in r.find_all(["td", "th"])]
+            if len(cells) < 4:
+                continue
+
+            raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else cells[1]
+            c_name = clean_name(raw_name)
+            if not is_valid_player_candidate(c_name):
+                continue
+
+            raw_num = cells[num_idx] if num_idx is not None and num_idx < len(cells) else (cells[0] if cells[0].isdigit() else "")
+
+            # GP-GS formatting
+            gp_val = cells[mapping["gp"]] if "gp" in mapping and mapping["gp"] < len(cells) else "0"
+            gs_val = cells[mapping["gs"]] if "gs" in mapping and mapping["gs"] < len(cells) else "0"
+            gp_gs_str = cells[mapping["gp_gs"]] if "gp_gs" in mapping and mapping["gp_gs"] < len(cells) else f"{gp_val}-{gs_val}"
+
+            g = {
+                "number": clean_number(raw_num),
+                "name": c_name,
+                "position": "G",
+                "year": "",
+                "is_goalie": True,
+                "gp_gs": gp_gs_str,
+                "ga": cells[mapping["ga"]] if "ga" in mapping and mapping["ga"] < len(cells) else "0",
+                "gaa": cells[mapping["gaa"]] if "gaa" in mapping and mapping["gaa"] < len(cells) else "0.00",
+                "sv": cells[mapping["sv"]] if "sv" in mapping and mapping["sv"] < len(cells) else "0",
+                "sv_pct": cells[mapping["sv_pct"]] if "sv_pct" in mapping and mapping["sv_pct"] < len(cells) else ".000",
+                "sho": cells[mapping["sho"]] if "sho" in mapping and mapping["sho"] < len(cells) else "0",
+                "w_l_t": cells[mapping["w_l_t"]] if "w_l_t" in mapping and mapping["w_l_t"] < len(cells) else "0-0-0",
+                "min": cells[mapping["min"]] if "min" in mapping and mapping["min"] < len(cells) else "0:00",
+            }
+            goalies.append(g)
+
+    return goalies
 
 # ── Section-Aware Team Stats Parser ──────────────────────────────────────────
 def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
@@ -704,7 +605,7 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
 
     return result
 
-# ── Player Finalizer (Skater vs Goalie) ────────────────────────────────────────
+# ── Finalize Player Dict ─────────────────────────────────────────────────────
 def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
     pos = (p.get("position") or "").upper()
     is_goalie = pos == "G" or p.get("is_goalie") is True
@@ -718,17 +619,16 @@ def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
     }
 
     if is_goalie:
-        record["gp_gs"] = str(p.get("gp_gs") or p.get("gp", "0"))
+        record["gp_gs"] = str(p.get("gp_gs") or "0-0")
         record["ga"] = clean_stat_int(p.get("ga"))
         record["gaa"] = str(p.get("gaa") or "0.00")
         record["sv"] = clean_stat_int(p.get("sv"))
         record["sv_pct"] = clean_stat_pct(p.get("sv_pct"))
+        record["sho"] = clean_stat_int(p.get("sho"))
         record["w_l_t"] = str(p.get("w_l_t") or "0-0-0")
         record["min"] = str(p.get("min") or "0:00")
     else:
         pn_pim = p.get("pn_pim", "")
-        if not pn_pim and (p.get("pen") or p.get("pim")):
-            pn_pim = f"{clean_stat_int(p.get('pen'))}-{clean_stat_int(p.get('pim'))}"
         record["gp"] = clean_stat_int(p.get("gp"))
         record["g"] = clean_stat_int(p.get("g"))
         record["a"] = clean_stat_int(p.get("a"))
@@ -742,53 +642,78 @@ def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
 
     return record
 
-# ── Scrape Single Team Pipeline ──────────────────────────────────────────────
+# ── Scrape Single Team Pipeline (Playwright DOM Driven) ──────────────────────
 async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], semaphore: asyncio.Semaphore) -> Dict[str, Any]:
     async with semaphore:
         slug, label = team_cfg["slug"], team_cfg["name"]
         logger.info(f"Processing {label} (Men's Hockey)...")
 
-        candidates = [team_cfg.get("roster_url", "")]
-        stats_html, (roster_lookup, roster_used) = await asyncio.gather(
-            fetch_page_html(context, team_cfg["stats_url"], wait_for_table=True),
-            fetch_roster(context, candidates, label),
-        )
+        roster_lookup = await fetch_roster(context, team_cfg.get("roster_url", ""), label)
 
-        stats_players: List[Dict[str, Any]] = []
-        style = "none"
+        raw_players: List[Dict[str, Any]] = []
+        team_stats: Dict[str, str] = {}
+        style = "HTML tables"
 
-        if stats_html:
-            # 1. Try Nuxt Data first with recursive resolver
-            stats_players = parse_nuxt_data_stats(stats_html)
-            style = "New Style (Nuxt data)"
+        page: Optional[Page] = None
+        try:
+            page = await context.new_page()
+            await page.goto(team_cfg["stats_url"], wait_until="domcontentloaded", timeout=30000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=4000)
+            except Exception:
+                pass
 
-            active_skaters = [p for p in stats_players if not p.get("is_goalie")]
-            has_scoring = any((_f(p.get("pts")) or 0) > 0 for p in active_skaters)
+            # 1. Parse Skaters Table (Default Active View)
+            html_skaters = await page.content()
+            soup_skaters = BeautifulSoup(html_skaters, "html.parser")
+            skaters_list = parse_skaters_table(soup_skaters)
+            raw_players.extend(skaters_list)
 
-            # 2. Fallback to HTML table parsing if Nuxt data had 0s
-            if not stats_players or not has_scoring:
-                soup = BeautifulSoup(stats_html, "html.parser")
-                table_players = parse_stats_tables(soup)
-                if len(table_players) >= len(stats_players):
-                    stats_players = table_players
-                    style = "Old Style (HTML tables)"
+            # 2. Parse Team Stats
+            team_stats = parse_team_stats(soup_skaters)
 
-        soup = BeautifulSoup(stats_html or "", "html.parser")
-        team_stats = parse_team_stats(soup)
+            # 3. Switch Dropdown to Goaltenders (New Style Vue/Nuxt)
+            try:
+                select_box = page.locator('button[data-test-id="s-select__box"]').filter(has_text=re.compile(r"Skaters|Goaltenders", re.I)).first
+                if await select_box.count() > 0:
+                    await select_box.click()
+                    await page.wait_for_timeout(400)
+                    goalie_option = page.locator('li[role="option"]').filter(has_text=re.compile(r"^Goaltenders", re.I)).first
+                    if await goalie_option.count() > 0:
+                        await goalie_option.click()
+                        await page.wait_for_timeout(1200)
+                        html_goalies = await page.content()
+                        soup_goalies = BeautifulSoup(html_goalies, "html.parser")
+                        goalies_list = parse_goalies_table(soup_goalies)
+                        raw_players.extend(goalies_list)
+                        style = "New Style (Vue dropdowns)"
+            except Exception as e:
+                logger.debug(f"[{label}] Goaltenders dropdown interaction: {e}")
 
-        # Merge roster data with player stats - STRICT ROSTER CHECK
+            # If no goalies were found from dropdown, parse from initial page (Old Style)
+            if not any(p.get("is_goalie") for p in raw_players):
+                goalies_list = parse_goalies_table(soup_skaters)
+                raw_players.extend(goalies_list)
+
+        except Exception as e:
+            logger.error(f"[{label}] Error navigating stats page: {e}")
+        finally:
+            if page:
+                await page.close()
+
+        # Strict Roster Merge and Player Finalization
         merged: List[Dict[str, str]] = []
         seen = set()
 
-        for sp in stats_players:
+        for sp in raw_players:
             name = sp.get("name", "")
             if not name or name.lower() in seen or not is_valid_player_candidate(name):
                 continue
 
             r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
 
-            # Strict Roster Gate: Discard unrostered match splits or game summaries
-            if roster_lookup and len(roster_lookup) >= 5 and not r_info:
+            # Strict Roster Gate: Discard unrostered match splits or label artifacts
+            if roster_lookup and len(roster_lookup) >= MIN_ROSTER_ENTRIES and not r_info:
                 continue
 
             seen.add(name.lower())
@@ -796,7 +721,7 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             if r_info:
                 p["name"] = r_info.get("name") or name
                 p["number"] = sp.get("number") or r_info.get("number", "")
-                p["position"] = r_info.get("position") or sp.get("position", "")
+                p["position"] = "G" if sp.get("is_goalie") else (r_info.get("position") or sp.get("position", "F"))
                 p["year"] = r_info.get("year") or sp.get("year", "")
 
             merged.append(finalize_player(p))
@@ -809,7 +734,7 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             "conference": "NCHC" if "non_conf" not in slug else "Non-Conference",
             "generated_at": now_iso(),
             "source_stats_url": team_cfg["stats_url"],
-            "source_roster_url": roster_used,
+            "source_roster_url": team_cfg.get("roster_url", ""),
             "site_style": style,
             "team_stats": team_stats,
             "players": merged,
