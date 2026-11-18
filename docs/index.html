@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NCHC Men's Hockey Season Stats — Broadcast Production Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap%22 rel="stylesheet">
+<style>
+
+    :root {
+
+      --bg: #0b0f17;
+
+      --card-bg: #131b26;
+
+      --card-border: #202b3c;
+
+      --text-main: #f1f5f9;
+
+      --text-muted: #94a3b8;
+
+      --primary: #38bdf8;
+
+      --primary-rgb: 56, 189, 248;
+
+      --team-color: #38bdf8;
+
+      --team-color-alt: #0284c7;
+
+      --accent: #f59e0b;
+
+      --gold: #fbbf24;
+
+      --silver: #94a3b8;
+
+      --bronze: #b45309;
+
+      --success: #10b981;
+
+    }
+ 
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+
+      background-color: var(--bg);
+
+      color: var(--text-main);
+
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+      min-height: 100vh;
+
+      padding: 1.5rem;
+
+    }
+ 
+    .container {
+
+      max-width: 1440px;
+
+      margin: 0 auto;
+
+    }
+ 
+    /* Header */
+
+    header {
+
+      display: flex;
+
+      flex-wrap: wrap;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+      gap: 1.25rem;
+
+      padding-bottom: 1.25rem;
+
+      border-bottom: 1px solid var(--card-border);
+
+      margin-bottom: 1.5rem;
+
+    }
+ 
+    .brand-title {
+
+      font-size: 1.5rem;
+
+      font-weight: 800;
+
+      letter-spacing: -0.02em;
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 0.75rem;
+
+    }
+
+    .badge-nchc {
+
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+
+      color: #fff;
+
+      font-size: 0.75rem;
+
+      font-weight: 700;
+
+      padding: 0.25rem 0.6rem;
+
+      border-radius: 4px;
+
+      text-transform: uppercase;
+
+      letter-spacing: 0.05em;
+
+    }
+ 
+    .meta-bar {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 1rem;
+
+      font-size: 0.85rem;
+
+      color: var(--text-muted);
+
+    }
+
+    .status-dot {
+
+      width: 8px;
+
+      height: 8px;
+
+      border-radius: 50%;
+
+      background: var(--success);
+
+      display: inline-block;
+
+    }
+ 
+    /* Team Selector Bar */
+
+    .teams-grid {
+
+      display: grid;
+
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+
+      gap: 0.5rem;
+
+      margin-bottom: 1.5rem;
+
+    }
+
+    .team-btn {
+
+      background: var(--card-bg);
+
+      border: 1px solid var(--card-border);
+
+      color: var(--text-muted);
+
+      padding: 0.65rem 0.75rem;
+
+      border-radius: 8px;
+
+      font-size: 0.85rem;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition: all 0.15s ease;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+      text-align: center;
+
+    }
+
+    .team-btn:hover {
+
+      border-color: var(--primary);
+
+      color: var(--text-main);
+
+      transform: translateY(-1px);
+
+    }
+
+    .team-btn.active {
+
+      background: var(--team-color);
+
+      color: #fff;
+
+      border-color: var(--team-color);
+
+      box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+
+    }
+ 
+    /* Team Summary & Control Strip */
+
+    .dashboard-panel {
+
+      display: grid;
+
+      grid-template-columns: 2fr 1fr;
+
+      gap: 1.25rem;
+
+      margin-bottom: 1.5rem;
+
+    }
+
+    @media (max-width: 900px) {
+
+      .dashboard-panel { grid-template-columns: 1fr; }
+
+    }
+ 
+    .card {
+
+      background: var(--card-bg);
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 12px;
+
+      padding: 1.25rem;
+
+    }
+ 
+    .team-header-row {
+
+      display: flex;
+
+      justify-content: space-between;
+
+      align-items: flex-start;
+
+      margin-bottom: 1rem;
+
+    }
+
+    .team-title {
+
+      font-size: 1.75rem;
+
+      font-weight: 800;
+
+    }
+
+    .team-links {
+
+      display: flex;
+
+      gap: 0.5rem;
+
+    }
+
+    .link-pill {
+
+      font-size: 0.75rem;
+
+      font-weight: 600;
+
+      color: var(--text-muted);
+
+      text-decoration: none;
+
+      background: rgba(255, 255, 255, 0.05);
+
+      border: 1px solid var(--card-border);
+
+      padding: 0.35rem 0.65rem;
+
+      border-radius: 6px;
+
+      transition: all 0.15s;
+
+    }
+
+    .link-pill:hover {
+
+      color: var(--text-main);
+
+      border-color: var(--primary);
+
+    }
+ 
+    .team-stats-grid {
+
+      display: grid;
+
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+
+      gap: 0.75rem;
+
+    }
+
+    .stat-box {
+
+      background: rgba(0, 0, 0, 0.25);
+
+      padding: 0.75rem;
+
+      border-radius: 8px;
+
+      border: 1px solid rgba(255, 255, 255, 0.03);
+
+    }
+
+    .stat-label {
+
+      font-size: 0.7rem;
+
+      text-transform: uppercase;
+
+      font-weight: 600;
+
+      color: var(--text-muted);
+
+      margin-bottom: 0.25rem;
+
+    }
+
+    .stat-value {
+
+      font-size: 1.25rem;
+
+      font-weight: 700;
+
+      font-family: 'JetBrains Mono', monospace;
+
+      color: var(--team-color);
+
+    }
+ 
+    /* Player Lookup / Spotlight */
+
+    .spotlight-card {
+
+      display: flex;
+
+      flex-direction: column;
+
+      justify-content: space-between;
+
+    }
+
+    .search-input {
+
+      width: 100%;
+
+      background: rgba(0, 0, 0, 0.3);
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 8px;
+
+      color: var(--text-main);
+
+      padding: 0.65rem 0.85rem;
+
+      font-size: 0.9rem;
+
+      outline: none;
+
+      margin-top: 0.5rem;
+
+      font-family: inherit;
+
+    }
+
+    .search-input:focus {
+
+      border-color: var(--team-color);
+
+    }
+ 
+    /* Controls Bar */
+
+    .controls-bar {
+
+      display: flex;
+
+      flex-wrap: wrap;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+      gap: 1rem;
+
+      margin-bottom: 1rem;
+
+    }
+
+    .filter-tabs {
+
+      display: flex;
+
+      background: var(--card-bg);
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 8px;
+
+      padding: 0.2rem;
+
+    }
+
+    .filter-btn {
+
+      background: transparent;
+
+      border: none;
+
+      color: var(--text-muted);
+
+      padding: 0.4rem 0.8rem;
+
+      border-radius: 6px;
+
+      font-size: 0.8rem;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+    }
+
+    .filter-btn.active {
+
+      background: rgba(255, 255, 255, 0.1);
+
+      color: var(--text-main);
+
+    }
+ 
+    /* Stats Table */
+
+    .table-wrapper {
+
+      background: var(--card-bg);
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 12px;
+
+      overflow-x: auto;
+
+    }
+
+    table {
+
+      width: 100%;
+
+      border-collapse: collapse;
+
+      text-align: right;
+
+      font-size: 0.88rem;
+
+    }
+
+    th, td {
+
+      padding: 0.75rem 0.85rem;
+
+      white-space: nowrap;
+
+    }
+
+    th {
+
+      background: rgba(0, 0, 0, 0.4);
+
+      color: var(--text-muted);
+
+      font-weight: 600;
+
+      font-size: 0.75rem;
+
+      text-transform: uppercase;
+
+      letter-spacing: 0.05em;
+
+      cursor: pointer;
+
+      user-select: none;
+
+      border-bottom: 1px solid var(--card-border);
+
+    }
+
+    th:hover {
+
+      color: var(--text-main);
+
+    }
+
+    th.sorted {
+
+      color: var(--team-color);
+
+    }
+
+    th:first-child, td:first-child,
+
+    th:nth-child(2), td:nth-child(2),
+
+    th:nth-child(3), td:nth-child(3),
+
+    th:nth-child(4), td:nth-child(4) {
+
+      text-align: left;
+
+    }
+ 
+    tbody tr {
+
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+
+      transition: background 0.1s;
+
+    }
+
+    tbody tr:hover {
+
+      background: rgba(255, 255, 255, 0.03);
+
+    }
+ 
+    .num-col {
+
+      font-family: 'JetBrains Mono', monospace;
+
+      font-weight: 700;
+
+      color: var(--text-muted);
+
+    }
+
+    .name-col {
+
+      font-weight: 600;
+
+      color: var(--text-main);
+
+    }
+
+    .pos-pill {
+
+      font-size: 0.7rem;
+
+      font-weight: 700;
+
+      padding: 0.15rem 0.4rem;
+
+      border-radius: 4px;
+
+      background: rgba(255, 255, 255, 0.08);
+
+      color: var(--text-muted);
+
+    }
+
+    .pos-G { background: rgba(234, 179, 8, 0.15); color: #fbbf24; }
+
+    .pos-D { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+
+    .pos-F { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+ 
+    .stat-num {
+
+      font-family: 'JetBrains Mono', monospace;
+
+      font-weight: 500;
+
+    }
+ 
+    /* Leader Badges */
+
+    .leader-1 { color: #fbbf24; font-weight: 700; }
+
+    .leader-2 { color: #cbd5e1; font-weight: 700; }
+
+    .leader-3 { color: #d97706; font-weight: 700; }
+ 
+    .loading-state {
+
+      padding: 4rem;
+
+      text-align: center;
+
+      color: var(--text-muted);
+
+    }
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<div class="brand-title">
+<span>NCHC Hockey Stats</span>
+<span class="badge-nchc">Men's D1</span>
+</div>
+<div class="meta-bar">
+<span><span class="status-dot"></span> <span id="gen-time">Loading stats...</span></span>
+<span id="site-style-pill" class="link-pill" style="display:none;"></span>
+</div>
+</header>
+ 
+    <!-- Team Selector -->
+<div class="teams-grid" id="teams-selector"></div>
+ 
+    <!-- Team Info & Spotlight Panel -->
+<div class="dashboard-panel">
+<div class="card">
+<div class="team-header-row">
+<div>
+<h2 class="team-title" id="team-name">—</h2>
+<div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;" id="player-count">0 Players on Roster</div>
+</div>
+<div class="team-links">
+<a href="#" target="_blank" class="link-pill" id="stats-source-link">Official Stats ↗</a>
+<a href="#" target="_blank" class="link-pill" id="roster-source-link">Roster ↗</a>
+<a href="#" target="_blank" class="link-pill" id="json-link">JSON ↗</a>
+</div>
+</div>
+ 
+        <div class="team-stats-grid" id="team-stats-box">
+<div class="stat-box"><div class="stat-label">Goals / G</div><div class="stat-value" id="ts-gpg">-</div></div>
+<div class="stat-box"><div class="stat-label">Shots / G</div><div class="stat-value" id="ts-spg">-</div></div>
+<div class="stat-box"><div class="stat-label">Shot %</div><div class="stat-value" id="ts-shp">-</div></div>
+<div class="stat-box"><div class="stat-label">Power Play %</div><div class="stat-value" id="ts-ppp">-</div></div>
+<div class="stat-box"><div class="stat-label">Opp PP% / PK%</div><div class="stat-value" id="ts-pkp">-</div></div>
+<div class="stat-box"><div class="stat-label">Pen / G</div><div class="stat-value" id="ts-penpg">-</div></div>
+<div class="stat-box"><div class="stat-label">PIM / G</div><div class="stat-value" id="ts-pimpg">-</div></div>
+<div class="stat-box"><div class="stat-label">Faceoff %</div><div class="stat-value" id="ts-fop">-</div></div>
+</div>
+</div>
+ 
+      <div class="card spotlight-card">
+<div>
+<div style="font-weight: 700; font-size: 1rem; margin-bottom: 0.25rem;">Roster Quick Lookup</div>
+<div style="font-size: 0.8rem; color: var(--text-muted);">Search by player name or jersey number</div>
+<input type="text" id="player-search" class="search-input" placeholder="e.g. 19 or Johnson..." />
+</div>
+<div id="spotlight-result" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted);">
+
+          Type jersey # or name to highlight a player.
+</div>
+</div>
+</div>
+ 
+    <!-- Table Filter Controls -->
+<div class="controls-bar">
+<div class="filter-tabs">
+<button class="filter-btn active" data-filter="ALL">All Players</button>
+<button class="filter-btn" data-filter="F">Forwards</button>
+<button class="filter-btn" data-filter="D">Defense</button>
+<button class="filter-btn" data-filter="G">Goalies</button>
+</div>
+<div style="font-size: 0.85rem; color: var(--text-muted);">
+
+        Click any column header to sort (PTS, G, A, BLK, PIM)
+</div>
+</div>
+ 
+    <!-- Players Table -->
+<div class="table-wrapper">
+<table id="stats-table">
+<thead>
+<tr>
+<th data-key="number">#</th>
+<th data-key="name">Player</th>
+<th data-key="position">Pos</th>
+<th data-key="year">Yr</th>
+<th data-key="gp">GP</th>
+<th data-key="g" class="sorted">G</th>
+<th data-key="a">A</th>
+<th data-key="pts">PTS</th>
+<th data-key="sh">SH</th>
+<th data-key="blk">BLK</th>
+<th data-key="ppg">PPG</th>
+<th data-key="shg">SHG</th>
+<th data-key="gwg">GWG</th>
+<th data-key="pn_pim">PN-PIM</th>
+</tr>
+</thead>
+<tbody id="table-body">
+<tr><td colspan="14" class="loading-state">Loading team statistics...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+ 
+  <script>
+
+    const TEAMS = 
+
+[
+
+      { name: "St. Thomas", slug: "st_thomas_mhockey", color: "#512888", colorAlt: "#805ad5" },
+
+      { name: "Colorado College", slug: "colorado_college_mhockey", color: "#e35205", colorAlt: "#000000" },
+
+      { name: "North Dakota", slug: "north_dakota_mhockey", color: "#009a44", colorAlt: "#000000" },
+
+      { name: "Arizona State", slug: "arizona_state_mhockey", color: "#8c1d40", colorAlt: "#ffc627" },
+
+      { name: "Denver", slug: "denver_mhockey", color: "#8b2332", colorAlt: "#a89968" },
+
+      { name: "Minnesota Duluth", slug: "minnesota_duluth_mhockey", color: "#7a0019", colorAlt: "#ffcc33" },
+
+      { name: "St. Cloud State", slug: "st_cloud_state_mhockey", color: "#c8102e", colorAlt: "#000000" },
+
+      { name: "Western Michigan", slug: "western_michigan_mhockey", color: "#6c4023", colorAlt: "#b59a57" },
+
+      { name: "Miami (OH)", slug: "miami_oh_mhockey", color: "#c8102e", colorAlt: "#000000" },
+
+      { name: "Omaha", slug: "omaha_mhockey", color: "#d00000", colorAlt: "#000000" }
+
+    ];
+ 
+    let currentTeam = TEAMS
+
+[0];
+
+    let currentData = null;
+
+    let currentFilter = "ALL";
+
+    let sortKey = "pts";
+
+    let sortAsc = false;
+ 
+    // Render team buttons
+
+    const selectorEl = document.getElementById("teams-selector");
+
+    TEAMS.forEach(team => {
+
+      const btn = document.createElement("button");
+
+      btn.className = `team-btn ${team.slug === currentTeam.slug ? "active" : ""}`;
+
+      btn.innerText = team.name;
+
+      btn.onclick = () => selectTeam(team);
+
+      selectorEl.appendChild(btn);
+
+    });
+ 
+    async function selectTeam(team) {
+
+      currentTeam = team;
+
+      document.querySelectorAll(".team-btn").forEach((btn, idx) => {
+
+        btn.classList.toggle("active", TEAMS
+
+[idx].slug === team.slug);
+
+      });
+ 
+      // Update team color variable
+
+      document.documentElement.style.setProperty('--team-color', team.color);
+ 
+      try {
+
+        const res = await fetch(`${team.slug}.json`);
+
+        if (!res.ok) throw new Error("JSON file not found");
+
+        currentData = await res.json();
+
+        renderDashboard();
+
+      } catch (err) {
+
+        document.getElementById("table-body").innerHTML = `
+<tr><td colspan="14" class="loading-state">
+
+            Failed to load data for ${team.name}. Check if <code>${team.slug}.json</code> exists.
+</td></tr>`;
+
+      }
+
+    }
+ 
+    function renderDashboard() {
+
+      if (!currentData) return;
+ 
+      document.getElementById("team-name").innerText = currentData.team || currentTeam.name;
+
+      document.getElementById("gen-time").innerText = currentData.generated_at ? `Updated: ${new Date(currentData.generated_at).toLocaleString()}` : 'Updated: Recently';
+
+      document.getElementById("player-count").innerText = `${currentData.players?.length || 0} Players on Roster`;
+ 
+      // Site Style Pill
+
+      const stylePill = document.getElementById("site-style-pill");
+
+      if (currentData.site_style) {
+
+        stylePill.innerText = currentData.site_style;
+
+        stylePill.style.display = "inline-block";
+
+      }
+ 
+      // Links
+
+      document.getElementById("stats-source-link").href = currentData.source_stats_url || "#";
+
+      document.getElementById("roster-source-link").href = currentData.source_roster_url || "#";
+
+      document.getElementById("json-link").href = `${currentTeam.slug}.json`;
+ 
+      // Team Stats
+
+      const ts = currentData.team_stats || {};
+
+      document.getElementById("ts-gpg").innerText = ts.goals_per_game || "-";
+
+      document.getElementById("ts-spg").innerText = ts.shots_per_game || "-";
+
+      document.getElementById("ts-shp").innerText = ts.shot_pct || "-";
+
+      document.getElementById("ts-ppp").innerText = ts.pp_pct || "-";
+
+      document.getElementById("ts-pkp").innerText = ts.pk_pct || "-";
+
+      document.getElementById("ts-penpg").innerText = ts.pen_per_game || "-";
+
+      document.getElementById("ts-pimpg").innerText = ts.pim_per_game || "-";
+
+      document.getElementById("ts-fop").innerText = ts.faceoff_pct || "-";
+ 
+      renderTable();
+
+    }
+ 
+    function renderTable() {
+
+      if (!currentData || !currentData.players) return;
+ 
+      let players = 
+
+[...currentData.players];
+
+      const searchTerm = document.getElementById("player-search").value.toLowerCase().trim();
+ 
+      // Filter by Position
+
+      if (currentFilter !== "ALL") {
+
+        players = players.filter(p => (p.position || "").toUpperCase() === currentFilter);
+
+      }
+ 
+      // Filter by Search
+
+      if (searchTerm) {
+
+        players = players.filter(p => 
+
+          (p.name || "").toLowerCase().includes(searchTerm) ||
+
+          (p.number || "").toString().includes(searchTerm)
+
+        );
+
+      }
+ 
+      // Compute Top 3 Leaders for badges
+
+      const leaderRanks = {};
+
+["pts", "g", "a", "blk", "sh", "ppg"].forEach(stat => {
+
+        const sortedVals = 
+
+[...new Set(currentData.players.map(p => parseFloat(p
+
+[stat]) || 0))]
+
+          .sort((a, b) => b - a);
+
+        leaderRanks
+
+[stat] = {
+
+          first: sortedVals
+
+[0] || null,
+
+          second: sortedVals
+
+[1] || null,
+
+          third: sortedVals
+
+[2] || null,
+
+        };
+
+      });
+ 
+      // Sorting
+
+      players.sort((a, b) => {
+
+        let va = a
+
+[sortKey];
+
+        let vb = b
+
+[sortKey];
+ 
+        if (sortKey === "pn_pim") {
+
+          va = parseFloat(a.pim) || 0;
+
+          vb = parseFloat(b.pim) || 0;
+
+        } else if (
+
+["number", "gp", "g", "a", "pts", "sh", "blk", "ppg", "shg", "gwg"].includes(sortKey)) {
+
+          va = parseFloat(va) || 0;
+
+          vb = parseFloat(vb) || 0;
+
+        } else {
+
+          va = (va || "").toString().toLowerCase();
+
+          vb = (vb || "").toString().toLowerCase();
+
+        }
+ 
+        if (va < vb) return sortAsc ? -1 : 1;
+
+        if (va > vb) return sortAsc ? 1 : -1;
+
+        return 0;
+
+      });
+ 
+      // Render Rows
+
+      const tbody = document.getElementById("table-body");
+
+      if (players.length === 0) {
+
+        tbody.innerHTML = `<tr><td colspan="14" class="loading-state">No players match the current criteria</td></tr>`;
+
+        return;
+
+      }
+ 
+      tbody.innerHTML = players.map(p => {
+
+        const getBadge = (field, val) => {
+
+          const num = parseFloat(val) || 0;
+
+          if (num <= 0) return "";
+
+          if (num === leaderRanks
+
+[field]?.first) return "leader-1";
+
+          if (num === leaderRanks
+
+[field]?.second) return "leader-2";
+
+          if (num === leaderRanks
+
+[field]?.third) return "leader-3";
+
+          return "";
+
+        };
+ 
+        const posClass = `pos-${p.position || 'F'}`;
+ 
+        return `
+<tr>
+<td class="num-col">${p.number || "-"}</td>
+<td class="name-col">${p.name || "-"}</td>
+<td><span class="pos-pill ${posClass}">${p.position || "-"}</span></td>
+<td>${p.year || "-"}</td>
+<td class="stat-num">${p.gp || "0"}</td>
+<td class="stat-num ${getBadge('g', p.g)}">${p.g || "0"}</td>
+<td class="stat-num ${getBadge('a', p.a)}">${p.a || "0"}</td>
+<td class="stat-num ${getBadge('pts', p.pts)}" style="font-weight:700;">${p.pts || "0"}</td>
+<td class="stat-num ${getBadge('sh', p.sh)}">${p.sh || "0"}</td>
+<td class="stat-num ${getBadge('blk', p.blk)}">${p.blk || "0"}</td>
+<td class="stat-num ${getBadge('ppg', p.ppg)}">${p.ppg || "0"}</td>
+<td class="stat-num">${p.shg || "0"}</td>
+<td class="stat-num">${p.gwg || "0"}</td>
+<td class="stat-num">${p.pn_pim || "0-0"}</td>
+</tr>
+
+        `;
+
+      }).join("");
+ 
+      // Update Spotlight
+
+      if (searchTerm && players.length === 1) {
+
+        const sp = players
+
+[0];
+
+        document.getElementById("spotlight-result").innerHTML = `
+<div style="background: rgba(0,0,0,0.3); padding:0.75rem; border-radius:8px;">
+<div style="font-weight:700; color:var(--text-main); font-size:1.05rem;">#${sp.number} ${sp.name} (${sp.position})</div>
+<div style="margin-top:0.35rem; display:flex; gap:0.75rem; font-family:'JetBrains Mono'; font-size:0.8rem;">
+<span>GP: <b>${sp.gp}</b></span>
+<span>G: <b>${sp.g}</b></span>
+<span>A: <b>${sp.a}</b></span>
+<span>PTS: <b>${sp.pts}</b></span>
+<span>PIM: <b>${sp.pn_pim}</b></span>
+</div>
+</div>
+
+        `;
+
+      } else {
+
+        document.getElementById("spotlight-result").innerText = "Type jersey # or name to highlight a player.";
+
+      }
+
+    }
+ 
+    // Sort Handler
+
+    document.querySelectorAll("#stats-table th").forEach(th => {
+
+      th.onclick = () => {
+
+        const key = th.getAttribute("data-key");
+
+        if (sortKey === key) {
+
+          sortAsc = !sortAsc;
+
+        } else {
+
+          sortKey = key;
+
+          sortAsc = false;
+
+        }
+ 
+        document.querySelectorAll("#stats-table th").forEach(el => {
+
+          el.classList.remove("sorted");
+
+        });
+
+        th.classList.add("sorted");
+
+        renderTable();
+
+      };
+
+    });
+ 
+    // Filter Buttons
+
+    document.querySelectorAll(".filter-btn").forEach(btn => {
+
+      btn.onclick = () => {
+
+        document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+
+        btn.classList.add("active");
+
+        currentFilter = btn.getAttribute("data-filter");
+
+        renderTable();
+
+      };
+
+    });
+ 
+    // Search input
+
+    document.getElementById("player-search").oninput = renderTable;
+ 
+    // Initial Load
+
+    selectTeam(TEAMS
+
+[0]);
+</script>
+</body>
+</html>
+ 
