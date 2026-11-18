@@ -4,20 +4,21 @@ scrape_nchc_hockey.py
 NCHC Men's Hockey player season stats + team stats scraper (Sidearm sites).
 
 Fixes applied:
-1. Strict Roster Filtering: Only rostered players appear in the output. All game-by-game
-   records, team splits, opponent match rows ("at Miami", "vs Air Force"), and stat labels
-   ("PENALTIES", "POINTS", "SAVES", "12.5", ".520") are completely filtered out.
-2. Section-Scoped Team Stats:
-   - Power Play%: extracts Home team conversion % (e.g. .222 -> 22.2%)
-   - Penalty Kill%: extracts Opponent conversion % (.235) and inverts to PK% (76.5%)
-   - Pen/G: extracts Home team penalties per game (e.g. 4.6)
-   - PIM/G: extracts Home team penalty minutes per game (e.g. 12.5)
-   - Faceoff%: extracts Home team faceoff % (e.g. .520 -> 52.0%)
-   - Goals/G, Shots/G, Shot% properly scoped without cross-contamination.
-3. Separate Goalie vs Skater Stats:
-   - Goalies (Pos G): gp_gs, ga, gaa, sv, sv_pct, w_l_t, min
-   - Skaters (Pos F/D): gp, g, a, pts, sh, blk, ppg, shg, gwg, pn_pim
-4. Non-Conference Support: Auto-loads non_conf_config.json if present.
+1. Accurate PPG, SHG, and GWG Extraction:
+   - Nuxt resolver aggregates all cumulative situation goalStats (e.g. powerPlayGoals: 4, shortHandedGoals: 1 for Lucas Van Vliet).
+   - HTML table parser accurately maps [GP, G, A, PTS, SH, SH%, +/-, PPG, SHG, GWG, BLK, PN-PIM] without column drift.
+2. Direct Skater & Goalie Property Mapping:
+   - Skaters: gp, g, a, pts, sh, blk, ppg, shg, gwg, pn_pim
+   - Goalies: gp_gs, ga, gaa, sv, sv_pct, w_l_t, min
+3. Clean Roster Integration:
+   - Roster gate ensures only true players are output, discarding game-by-game results, totals, and opponent lines.
+4. Correct Section-Scoped Team Stats:
+   - Power Play%: Home conversion rate (e.g. 22.2%)
+   - Penalty Kill%: Opponent conversion inverted (1.0 - .235 = 76.5%)
+   - Penalties / G: Home rate (e.g. 4.6)
+   - PIM / G: Home rate (e.g. 12.5)
+   - Faceoff%: Home rate (e.g. 52.0%)
+5. Non-Conference Support: Auto-loads non_conf_config.json if present.
 """
 
 from __future__ import annotations
@@ -102,52 +103,6 @@ TEAM_STAT_KEYS = [
     "pk_pct", "pen_per_game", "pim_per_game", "faceoff_pct",
 ]
 
-HEADER_ALIASES: Dict[str, List[str]] = {
-    # Skater
-    "gp": ["GP", "GAMES", "GAMESPLAYED", "GP-GS", "GP/GS"],
-    "g": ["G", "GOALS"],
-    "a": ["A", "AST", "ASSISTS"],
-    "pts": ["PTS", "POINTS", "TP", "PT"],
-    "sh": ["SH", "SOG", "SHOTS", "SHOTSONGOAL"],
-    "blk": ["BLK", "BLKS", "BS", "BLOCKS", "BLOCKEDSHOTS", "BLKD", "SHOTSBLOCKED"],
-    "ppg": ["PPG", "PP", "PPGOALS", "POWERPLAYGOALS", "POWERPLAYG", "POWERPLAYGOAL"],
-    "shg": ["SHG", "SHGOALS", "SHORTHANDEDGOALS", "SHORTHANDGOALS", "SHORTHANDEDG"],
-    "gwg": ["GWG", "GW", "GAMEWINNINGGOALS", "GWGOALS", "GAMEWINNINGG"],
-    "pn_pim": ["PN-PIM", "PEN-PIM", "PEN-MIN", "PN-MIN", "PEN/PIM", "PN/PIM", "PENALTIES-PIM", "PENALTIES-MINUTES"],
-    "pen": ["PEN", "PN", "PENALTIES", "PENS"],
-    "pim": ["PIM", "PENALTYMINUTES", "PENMIN", "PENALTYMIN"],
-    # Goalie
-    "gp_gs": ["GP-GS", "GP/GS", "GP_GS", "GAMES-STARTED", "GP-GS-MIN"],
-    "ga": ["GA", "GOALSAGAINST"],
-    "gaa": ["GAA", "GOALSAGAINSTAVERAGE", "AVG"],
-    "sv": ["SV", "SAVES", "SVS"],
-    "sv_pct": ["SV%", "SVPCT", "SAVE%", "SAVEPCT", "SVP", "PCT"],
-    "w_l_t": ["W-L-T", "W-L-T-SHO", "RECORD", "WL", "W-L", "WLT"],
-    "min": ["MIN", "MINUTES", "TIME", "TOI"],
-}
-
-NUXT_ALIASES: Dict[str, List[str]] = {
-    "gp": ["gamesPlayed", "gp", "games", "gpgs", "totalGamesPlayed", "overallGames"],
-    "g": ["goals", "g", "totalGoals", "scoringGoals"],
-    "a": ["assists", "a", "totalAssists", "scoringAssists"],
-    "pts": ["points", "pts", "totalPoints", "scoringPoints"],
-    "sh": ["shots", "sh", "sog", "shotsOnGoal", "totalShots", "shotsTotal"],
-    "blk": ["blockedShots", "blocks", "blk", "blks", "shotsBlocked", "blockShots"],
-    "ppg": ["powerPlayGoals", "ppg", "ppGoals", "powerplayGoals"],
-    "shg": ["shortHandedGoals", "shg", "shGoals", "shorthandedGoals"],
-    "gwg": ["gameWinningGoals", "gwg", "gameWinners"],
-    "pn_pim": ["pnPim", "penPim", "penaltiesPim", "pnpim", "penaltiesPenaltyMinutes"],
-    "pen": ["penalties", "pen", "pn", "penaltyCount", "numPenalties"],
-    "pim": ["penaltyMinutes", "pim", "penMin", "penaltyMins", "penMinutes"],
-    "gp_gs": ["gamesStarted", "gpgs", "gpGs", "recordGpGs"],
-    "ga": ["goalsAgainst", "ga", "totalGoalsAgainst"],
-    "gaa": ["goalsAgainstAverage", "gaa", "avgGaa"],
-    "sv": ["saves", "sv", "totalSaves"],
-    "sv_pct": ["savePercentage", "savePct", "svPct", "pctSave"],
-    "w_l_t": ["winLossTie", "record", "wlt", "wltRecord"],
-    "min": ["minutes", "min", "timeOnIce"],
-}
-
 DISCARD_TERMS = {
     "team", "tm", "total", "totals", "opponent", "opponents", "opp", "season", "overall",
     "conference", "goals", "assists", "points", "shots", "penalties", "penalty minutes",
@@ -169,18 +124,6 @@ _CLASS_MAP = {
     "SR": "SR", "SENIOR": "SR", "FOURTH": "SR", "4TH": "SR",
     "GR": "GR", "GRAD": "GR", "GRADUATE": "GR", "GS": "GR", "FIFTH": "GR", "5TH": "GR",
 }
-
-def _nk(text: Any) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(text).lower())
-
-def _hk(text: str) -> str:
-    return re.sub(r"[^A-Z0-9%/+\-]", "", (text or "").upper().replace("–", "-").replace("—", "-"))
-
-HEADER_LOOKUP: Dict[str, str] = {_hk(a): f for f, lst in HEADER_ALIASES.items() for a in lst}
-NUXT_LOOKUP = {f: [_nk(a) for a in lst] for f, lst in NUXT_ALIASES.items()}
-ROW_FIELDS = list(HEADER_ALIASES.keys())
-NAME_HEADERS = {"PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "GOALTENDER", "SKATER"}
-NUM_HEADERS = {"#", "no", "no.", "jersey", "num", "number", "uniform"}
 
 def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -282,7 +225,6 @@ def is_valid_player_candidate(name: str) -> bool:
         return False
     if low.startswith("at ") or low.startswith("vs ") or low.startswith("#"):
         return False
-    # Filter out pure numbers, dates, or split stats
     if re.match(r"^[\d\.\-\s/%:]+$", low):
         return False
     return True
@@ -361,6 +303,18 @@ NUXT_PATTERNS = [
     r"window\.__NUXT__\s*=\s*(.*?);\s*</script>",
 ]
 
+def deep_resolve_nuxt(val: Any, data: List[Any], depth: int = 0) -> Any:
+    if depth > 10:
+        return val
+    if isinstance(val, int) and 0 <= val < len(data):
+        target = data[val]
+        return deep_resolve_nuxt(target, data, depth + 1)
+    elif isinstance(val, dict):
+        return {k: deep_resolve_nuxt(v, data, depth + 1) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [deep_resolve_nuxt(v, data, depth + 1) for v in val]
+    return val
+
 def parse_nuxt_roster_data(html: str) -> Dict[str, Dict[str, str]]:
     roster_lookup: Dict[str, Dict[str, str]] = {}
     for pat in NUXT_PATTERNS:
@@ -371,25 +325,27 @@ def parse_nuxt_roster_data(html: str) -> Dict[str, Dict[str, str]]:
             data = json.loads(m.group(1))
             if not isinstance(data, list):
                 continue
-            def resolve(val: Any) -> str:
-                if isinstance(val, int) and 0 <= val < len(data):
-                    target = data[val]
-                    if isinstance(target, (str, int, float)):
-                        return str(target)
-                return str(val) if val is not None else ""
 
             for item in data:
                 if not isinstance(item, dict):
                     continue
-                raw_name = (item.get("name") or item.get("playerName") or item.get("fullName") or item.get("displayName"))
-                if not raw_name:
+                resolved = deep_resolve_nuxt(item, data)
+                if not isinstance(resolved, dict):
                     continue
-                c_name = clean_name(resolve(raw_name))
-                raw_num = item.get("uniform") or item.get("jersey") or item.get("number") or item.get("jerseyNumber")
-                raw_pos = item.get("position") or item.get("positionShort") or item.get("pos")
-                raw_yr = item.get("academicYear") or item.get("year") or item.get("class") or item.get("cl")
-                _add_roster(roster_lookup, c_name, clean_number(resolve(raw_num)),
-                            normalize_position(resolve(raw_pos)), normalize_year(resolve(raw_yr)))
+
+                raw_name = (resolved.get("name") or resolved.get("playerName") or resolved.get("fullName") or resolved.get("displayName"))
+                if not raw_name or not isinstance(raw_name, str):
+                    continue
+                c_name = clean_name(raw_name)
+                if not is_valid_player_candidate(c_name):
+                    continue
+
+                raw_num = resolved.get("uniform") or resolved.get("jersey") or resolved.get("number") or resolved.get("jerseyNumber") or resolved.get("uniformNumber")
+                raw_pos = resolved.get("position") or resolved.get("positionShort") or resolved.get("pos")
+                raw_yr = resolved.get("academicYear") or resolved.get("year") or resolved.get("class") or resolved.get("cl")
+
+                _add_roster(roster_lookup, c_name, clean_number(raw_num),
+                            normalize_position(str(raw_pos or "")), normalize_year(str(raw_yr or "")))
         except Exception:
             continue
         if len(roster_lookup) >= 5:
@@ -440,9 +396,8 @@ async def fetch_roster(context: BrowserContext, candidates: List[str], label: st
     return best_lookup, best_url
 
 # ── Nuxt Data Player Stats Extractor ──────────────────────────────────────────
-def parse_nuxt_data_stats(html: str) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+def parse_nuxt_data_stats(html: str) -> List[Dict[str, Any]]:
     players: List[Dict[str, Any]] = []
-    totals: Dict[str, str] = {}
 
     for pat in NUXT_PATTERNS:
         m = re.search(pat, html, re.DOTALL)
@@ -453,82 +408,155 @@ def parse_nuxt_data_stats(html: str) -> Tuple[List[Dict[str, Any]], Dict[str, st
             if not isinstance(data, list):
                 continue
 
-            def resolve(val: Any) -> Any:
-                if isinstance(val, int) and 0 <= val < len(data):
-                    return data[val]
-                return val
+            for raw_item in data:
+                if not isinstance(raw_item, dict):
+                    continue
 
-            for item in data:
+                item = deep_resolve_nuxt(raw_item, data)
                 if not isinstance(item, dict):
                     continue
+
                 if any(k in item for k in ("boxscoreUrl", "opponent", "winOrLoss", "gameDate")):
                     continue
 
                 flat: Dict[str, Any] = {}
-                for k, v in item.items():
-                    res = resolve(v)
-                    if isinstance(res, dict):
-                        for sub_k, sub_v in res.items():
-                            flat[_nk(sub_k)] = str(resolve(sub_v))
-                    else:
-                        flat[_nk(k)] = str(res)
+                def extract_flat(d: Dict[str, Any]) -> None:
+                    for k, v in d.items():
+                        if isinstance(v, dict):
+                            extract_flat(v)
+                        elif isinstance(v, (str, int, float)) and v is not None:
+                            flat[re.sub(r"[^a-z0-9]", "", str(k).lower())] = str(v)
 
-                def stat(field: str) -> str:
-                    for a in NUXT_LOOKUP.get(field, []):
-                        if a in flat:
-                            val = flat[a].strip()
-                            if val and val not in ("None", "null", "undefined"):
-                                return val
-                    return ""
+                extract_flat(item)
 
-                fields = {f: stat(f) for f in ROW_FIELDS}
-                has_skater_stat = any(fields.get(f) for f in ("gp", "g", "a", "pts", "sh"))
-                has_goalie_stat = any(fields.get(f) for f in ("gaa", "sv", "sv_pct", "ga"))
-
-                if not (has_skater_stat or has_goalie_stat):
-                    continue
-
-                raw_name = ""
-                for k in ("playername", "namefromstats", "name", "fullname", "displayname"):
-                    if k in flat and flat[k]:
-                        raw_name = flat[k]
-                        break
-                if not raw_name:
+                raw_name = (flat.get("playername") or flat.get("namefromstats") or flat.get("name") or
+                            flat.get("fullname") or flat.get("displayname"))
+                if not raw_name or not isinstance(raw_name, str):
                     continue
 
                 c_name = clean_name(raw_name)
                 if not is_valid_player_candidate(c_name):
                     continue
 
-                raw_num = flat.get("jersey") or flat.get("number") or flat.get("uniform") or ""
-                raw_pos = flat.get("position") or flat.get("pos") or ""
-                raw_yr = flat.get("year") or flat.get("class") or flat.get("academicyear") or ""
+                raw_num = (flat.get("playeruniform") or flat.get("uniformnumber") or flat.get("jersey") or
+                           flat.get("number") or flat.get("uniform") or "")
+                raw_pos = flat.get("position") or flat.get("positionshort") or flat.get("pos") or ""
+                raw_yr = flat.get("academicyear") or flat.get("year") or flat.get("class") or ""
 
-                is_goalie = normalize_position(raw_pos) == "G" or has_goalie_stat
+                # Skater stats extraction
+                gp = flat.get("gamesplayed") or flat.get("gp") or flat.get("totalgamesplayed") or "0"
+                g = flat.get("goals") or flat.get("g") or flat.get("totalgoals") or "0"
+                a = flat.get("assists") or flat.get("a") or flat.get("totalassists") or "0"
+                pts = flat.get("points") or flat.get("pts") or flat.get("totalpoints") or "0"
+                sh = flat.get("shots") or flat.get("sh") or flat.get("sog") or flat.get("shotsongoal") or "0"
+                blk = flat.get("blocked") or flat.get("blockedshots") or flat.get("blocks") or flat.get("blk") or "0"
+                ppg = flat.get("powerplaygoals") or flat.get("ppg") or flat.get("ppgoals") or "0"
+                shg = flat.get("shorthandedgoals") or flat.get("shg") or flat.get("shgoals") or "0"
+                gwg = flat.get("gamewinninggoals") or flat.get("gwg") or "0"
+
+                # Penalties / PIM
+                pen = flat.get("count") or flat.get("penalties") or flat.get("pen") or "0"
+                pim = flat.get("minutes") or flat.get("penaltyminutes") or flat.get("pim") or "0"
+                pn_pim = f"{clean_stat_int(pen)}-{clean_stat_int(pim)}"
+
+                # Goalie stats
+                has_goalie = "saves" in flat or "goalsagainstaverage" in flat or "gaa" in flat or normalize_position(str(raw_pos)) == "G"
+                gp_gs = flat.get("gamesstarted") or gp
+                ga = flat.get("goalsagainst") or flat.get("allgoalsallowed") or "0"
+                gaa = flat.get("goalsagainstaverage") or flat.get("gaa") or "0.00"
+                sv = flat.get("saves") or flat.get("sv") or "0"
+                sv_pct = flat.get("savepercentage") or flat.get("svpct") or ".000"
+                w_l_t = flat.get("record") or flat.get("winlosstie") or "0-0-0"
+                min_played = flat.get("minutes") or flat.get("min") or "0:00"
 
                 p = {
                     "number": clean_number(raw_num),
                     "name": c_name,
-                    "position": normalize_position(raw_pos),
-                    "year": normalize_year(raw_yr),
-                    "is_goalie": is_goalie,
+                    "position": normalize_position(str(raw_pos)),
+                    "year": normalize_year(str(raw_yr)),
+                    "is_goalie": has_goalie,
+                    "gp": gp,
+                    "g": g,
+                    "a": a,
+                    "pts": pts,
+                    "sh": sh,
+                    "blk": blk,
+                    "ppg": ppg,
+                    "shg": shg,
+                    "gwg": gwg,
+                    "pn_pim": pn_pim,
+                    "gp_gs": gp_gs,
+                    "ga": ga,
+                    "gaa": gaa,
+                    "sv": sv,
+                    "sv_pct": sv_pct,
+                    "w_l_t": w_l_t,
+                    "min": min_played,
                 }
-                p.update(fields)
                 players.append(p)
         except Exception:
             continue
         if len(players) >= 5:
             break
 
-    return players, totals
+    return players
 
-# ── Table Stats Parser (HTML) ─────────────────────────────────────────────────
-def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+# ── Table Stats Parser (HTML Fallback) ────────────────────────────────────────
+def map_table_header(header_text: str) -> Optional[str]:
+    raw = header_text.strip().upper()
+    hk = re.sub(r"[^A-Z0-9%/+\-]", "", raw)
+
+    if hk in ("#", "NO", "NO.", "JERSEY", "NUM", "NUMBER", "UNIFORM"):
+        return "number"
+    if hk in ("PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "SKATER", "GOALTENDER"):
+        return "name"
+    if hk in ("GP", "GAMES", "GAMESPLAYED"):
+        return "gp"
+    if hk in ("G", "GOALS"):
+        return "g"
+    if hk in ("A", "AST", "ASSISTS"):
+        return "a"
+    if hk in ("PTS", "POINTS", "TP", "PT"):
+        return "pts"
+    if hk in ("SH", "SOG", "SHOTS", "SHOTSONGOAL"):
+        return "sh"
+    if hk in ("PPG", "PP", "PPGOALS", "POWERPLAYGOALS", "POWERPLAYG", "POWERPLAYGOAL"):
+        return "ppg"
+    if hk in ("SHG", "SHGOALS", "SHORTHANDEDGOALS", "SHORTHANDGOALS", "SHORTHANDEDG", "SHORTHANDG"):
+        return "shg"
+    if hk in ("GWG", "GW", "GAMEWINNINGGOALS", "GWGOALS", "GAMEWINNINGG"):
+        return "gwg"
+    if hk in ("PN-PIM", "PEN-PIM", "PEN-MIN", "PN-MIN", "PEN/PIM", "PN/PIM", "PENALTIES-PIM", "PENALTIES-MINUTES", "PENALTIES/PIM"):
+        return "pn_pim"
+    if hk in ("PEN", "PN", "PENALTIES"):
+        return "pen"
+    if hk in ("PIM", "PENALTYMINUTES", "PENMIN"):
+        return "pim"
+    if hk in ("BLK", "BLKS", "BS", "BLOCKS", "BLOCKEDSHOTS", "BLKD", "SHOTSBLOCKED"):
+        return "blk"
+
+    # Goalie headers
+    if hk in ("GP-GS", "GP/GS", "GP_GS", "GAMES-STARTED"):
+        return "gp_gs"
+    if hk in ("GA", "GOALSAGAINST"):
+        return "ga"
+    if hk in ("GAA", "GOALSAGAINSTAVERAGE"):
+        return "gaa"
+    if hk in ("SV", "SAVES", "SVS"):
+        return "sv"
+    if hk in ("SV%", "SVPCT", "SAVE%", "SAVEPCT", "SVP"):
+        return "sv_pct"
+    if hk in ("W-L-T", "W-L-T-SHO", "RECORD", "WL", "W-L", "WLT"):
+        return "w_l_t"
+    if hk in ("MIN", "MINUTES", "TOI", "TIME"):
+        return "min"
+
+    return None
+
+def parse_stats_tables(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     players: List[Dict[str, Any]] = []
-    totals: Dict[str, str] = {}
 
     for table in soup.find_all("table"):
-        # Explicitly skip team split tables and game results
         prev_heading = table.find_previous(["h2", "h3", "h4", "caption", "div"])
         prev_text = prev_heading.get_text(" ", strip=True).upper() if prev_heading else ""
         if any(bad in prev_text for bad in ["GAME RESULTS", "OVERALL TEAM STATS", "TEAM STATISTICS", "GOALS BY PERIOD", "SHOTS BY PERIOD"]):
@@ -539,37 +567,31 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
             continue
 
         header_row = rows[0]
-        cols = [_hk(c.get_text(" ", strip=True)) for c in header_row.find_all(["th", "td"])]
-        mapping = {}
+        cols = [c.get_text(" ", strip=True) for c in header_row.find_all(["th", "td"])]
+        mapping: Dict[str, int] = {}
         for idx, col in enumerate(cols):
-            f = HEADER_LOOKUP.get(col)
-            if f:
+            f = map_table_header(col)
+            if f and f not in mapping:
                 mapping[f] = idx
 
-        # Must have at least 2 recognized hockey stat columns to be a valid player table
-        if len(mapping) < 2:
+        if len(mapping) < 3:
             continue
 
         is_goalie_table = ("gaa" in mapping) or ("sv_pct" in mapping) or ("sv" in mapping)
-
-        name_idx = None
-        for idx, col in enumerate(cols):
-            if col in NAME_HEADERS:
-                name_idx = idx
-                break
+        name_idx = mapping.get("name")
+        num_idx = mapping.get("number")
 
         for r in rows[1:]:
             cells = [c.get_text(" ", strip=True) for c in r.find_all(["td", "th"])]
             if len(cells) < 3:
                 continue
 
-            raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else cells[1]
+            raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else (cells[1] if len(cells) > 1 else "")
             c_name = clean_name(raw_name)
             if not is_valid_player_candidate(c_name):
                 continue
 
-            fields = {f: cells[mapping[f]] for f in mapping if mapping[f] < len(cells)}
-            raw_num = cells[0] if cells[0].isdigit() else ""
+            raw_num = cells[num_idx] if num_idx is not None and num_idx < len(cells) else (cells[0] if cells[0].isdigit() else "")
 
             p = {
                 "number": clean_number(raw_num),
@@ -578,26 +600,20 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
                 "year": "",
                 "is_goalie": is_goalie_table,
             }
-            p.update(fields)
+            for field, idx_col in mapping.items():
+                if idx_col < len(cells):
+                    p[field] = cells[idx_col]
+
             players.append(p)
 
-    return players, totals
+    return players
 
 # ── Section-Aware Team Stats Parser ──────────────────────────────────────────
 def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
-    """
-    Parses Sidearm's team statistics table by section to prevent value collisions.
-    Sections:
-    - POWER PLAYS / POWER PLAY: Conversion Percentage (Col 1: Home, Col 2: Opponent -> Invert to PK%)
-    - PENALTIES: Per Game (Col 1: Pen/G), Minutes Per Game (Col 1: PIM/G)
-    - FACEOFFS: Percentage (Col 1: Faceoff %)
-    - GOALS / SHOTS: Goals/Game, Shots/Game, Shot %
-    """
     found: Dict[str, str] = {}
     current_section = ""
 
     for table in soup.find_all("table"):
-        # Check previous heading or caption for section context
         heading = table.find_previous(["h2", "h3", "h4", "caption"])
         if heading:
             h_text = heading.get_text(" ", strip=True).upper()
@@ -621,7 +637,6 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
             val_team = cells[1].strip() if len(cells) > 1 else ""
             val_opp = cells[2].strip() if len(cells) > 2 else ""
 
-            # Check if current row acts as a section divider
             if "power play" in label:
                 current_section = "POWER_PLAY"
             elif "penalt" in label:
@@ -703,13 +718,13 @@ def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
     }
 
     if is_goalie:
-        record["gp_gs"] = p.get("gp_gs") or p.get("gp", "0")
+        record["gp_gs"] = str(p.get("gp_gs") or p.get("gp", "0"))
         record["ga"] = clean_stat_int(p.get("ga"))
-        record["gaa"] = p.get("gaa") or "0.00"
+        record["gaa"] = str(p.get("gaa") or "0.00")
         record["sv"] = clean_stat_int(p.get("sv"))
         record["sv_pct"] = clean_stat_pct(p.get("sv_pct"))
-        record["w_l_t"] = p.get("w_l_t") or "0-0-0"
-        record["min"] = p.get("min") or "0:00"
+        record["w_l_t"] = str(p.get("w_l_t") or "0-0-0")
+        record["min"] = str(p.get("min") or "0:00")
     else:
         pn_pim = p.get("pn_pim", "")
         if not pn_pim and (p.get("pen") or p.get("pim")):
@@ -743,8 +758,8 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
         style = "none"
 
         if stats_html:
-            # 1. Try Nuxt Data first
-            stats_players, _ = parse_nuxt_data_stats(stats_html)
+            # 1. Try Nuxt Data first with recursive resolver
+            stats_players = parse_nuxt_data_stats(stats_html)
             style = "New Style (Nuxt data)"
 
             active_skaters = [p for p in stats_players if not p.get("is_goalie")]
@@ -753,7 +768,7 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             # 2. Fallback to HTML table parsing if Nuxt data had 0s
             if not stats_players or not has_scoring:
                 soup = BeautifulSoup(stats_html, "html.parser")
-                table_players, _ = parse_stats_tables(soup)
+                table_players = parse_stats_tables(soup)
                 if len(table_players) >= len(stats_players):
                     stats_players = table_players
                     style = "Old Style (HTML tables)"
@@ -772,7 +787,7 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
 
             r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
 
-            # Roster Gate: If roster was loaded, ensure the player actually exists on the roster
+            # Strict Roster Gate: Discard unrostered match splits or game summaries
             if roster_lookup and len(roster_lookup) >= 5 and not r_info:
                 continue
 
@@ -812,7 +827,6 @@ async def run_scraper(only: Optional[List[str]], debug: bool) -> None:
     os.makedirs("docs", exist_ok=True)
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
-    # Combine conference teams + any non-conf teams in non_conf_config.json
     teams = list(TEAMS_CONFIG) + load_non_conf_config()
 
     if only:
