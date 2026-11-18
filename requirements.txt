@@ -1,0 +1,10 @@
+# ── HTTP & HTML Parsing ────────────────────────────────────────────────────
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.2.2
+ 
+# ── Headless Browser Automation ────────────────────────────────────────────
+playwright>=1.44.0
+ 
+# ── Data & Date Parsing ────────────────────────────────────────────────────
+python-dateutil==2.9.0
