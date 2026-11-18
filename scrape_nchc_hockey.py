@@ -3,19 +3,17 @@
 scrape_nchc_hockey.py
 NCHC Men's Hockey player season stats + team stats scraper.
 
-Rebuilt from square one to reliably handle Sidearm New Style (Vue/Nuxt dropdown menus),
-Old Style HTML multi-table layouts, and ASU custom formats.
-
-Workflow for New Style sites:
-1. Navigates to the stats page using Playwright.
-2. Ensures 'Player Stats' -> 'Overall' -> 'Skaters' view is active and parses all skater rows:
-   - GP, G, A, PTS, SH, BLK, PPG, SHG, GWG, PN-PIM
-3. Switches dropdown to 'Goaltenders' view (or parses Goalie table) and extracts:
-   - GP-GS, GA, GAA, SV, SV%, SHO, W-L-T, MIN
-4. Scrapes Overall Team Stats:
-   - Goals/G, Shots/G, Shot%, PP%, PK% (100 - Opponent PP%), Pen/G, PIM/G, Faceoff%
-5. Merges with /roster/print data to strictly verify player identities, positions, and academic years.
-6. Writes clean, standardized JSON to <slug>.json and docs/<slug>.json.
+Key Updates:
+1. Goaltender Record Parsing:
+   - Accurately captures separate 'W', 'L', and 'T' columns from the Goaltender stats table
+     and compiles them into 'W-L-T' (e.g., 3-3-0 or 7-2-1).
+   - Also supports composite 'W-L-T' / 'RECORD' columns if present.
+2. Output Directory:
+   - Exclusively writes JSON files to the 'docs/' directory (docs/<slug>.json).
+   - No longer generates redundant JSON files in the root directory.
+3. Non-Conference Standardization:
+   - Guarantees any non-conference team defined in non_conf_config.json is saved as
+     'docs/non_conf_mhockey.json' for seamless integration with index.html.
 """
 
 from __future__ import annotations
@@ -202,6 +200,19 @@ def clean_pn_pim(val: Any) -> str:
         return f"0-{int(s)}"
     return "0-0"
 
+def clean_w_l_t(val: Any) -> str:
+    if val is None:
+        return "0-0-0"
+    s = str(val).strip().replace("–", "-").replace("—", "-")
+    # Match standard format like 3-3-0 or 7-2
+    m = re.match(r"^(\d+)\s*-\s*(\d+)(?:\s*-\s*(\d+))?$", s)
+    if m:
+        w = int(m.group(1))
+        l = int(m.group(2))
+        t = int(m.group(3)) if m.group(3) is not None else 0
+        return f"{w}-{l}-{t}"
+    return s if s and s != "-" else "0-0-0"
+
 def _f(x: Any) -> Optional[float]:
     if x in (None, ""):
         return None
@@ -236,10 +247,10 @@ def load_non_conf_config() -> List[Dict[str, Any]]:
             for key, info in cfg.items():
                 if isinstance(info, dict) and info.get("stats_url"):
                     name = info.get("name") or "Non-Conf Opponent"
-                    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "non_conf_mhockey"
+                    # Strictly ensure slug is non_conf_mhockey for web dashboard
                     teams.append({
                         "name": name,
-                        "slug": slug,
+                        "slug": "non_conf_mhockey",
                         "style": "new",
                         "stats_url": info["stats_url"],
                         "roster_url": info.get("roster_url") or "",
@@ -384,13 +395,20 @@ def map_goalie_header(header_text: str) -> Optional[str]:
         return "sv_pct"
     if hk in ("SHO", "SO", "SHUTOUTS"):
         return "sho"
+    # Separate W, L, T columns
+    if hk in ("W", "WIN", "WINS"):
+        return "w"
+    if hk in ("L", "LOSS", "LOSSES"):
+        return "l"
+    if hk in ("T", "TIE", "TIES"):
+        return "t"
     if hk in ("W-L-T", "W-L-T-SHO", "RECORD", "WL", "W-L", "WLT"):
         return "w_l_t"
     if hk in ("MIN", "MINUTES", "TOI", "TIME"):
         return "min"
     return None
 
-# ── Table Parser Helper ───────────────────────────────────────────────────────
+# ── Table Parser Helpers ──────────────────────────────────────────────────────
 def parse_skaters_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     skaters: List[Dict[str, Any]] = []
     for table in soup.find_all("table"):
@@ -490,6 +508,17 @@ def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
             gs_val = cells[mapping["gs"]] if "gs" in mapping and mapping["gs"] < len(cells) else "0"
             gp_gs_str = cells[mapping["gp_gs"]] if "gp_gs" in mapping and mapping["gp_gs"] < len(cells) else f"{gp_val}-{gs_val}"
 
+            # W-L-T record formatting from individual W, L, T columns or composite column
+            if "w" in mapping and "l" in mapping:
+                w_val = clean_stat_int(cells[mapping["w"]]) if mapping["w"] < len(cells) else "0"
+                l_val = clean_stat_int(cells[mapping["l"]]) if mapping["l"] < len(cells) else "0"
+                t_val = clean_stat_int(cells[mapping["t"]]) if "t" in mapping and mapping["t"] < len(cells) else "0"
+                wlt_str = f"{w_val}-{l_val}-{t_val}"
+            elif "w_l_t" in mapping and mapping["w_l_t"] < len(cells):
+                wlt_str = clean_w_l_t(cells[mapping["w_l_t"]])
+            else:
+                wlt_str = "0-0-0"
+
             g = {
                 "number": clean_number(raw_num),
                 "name": c_name,
@@ -502,7 +531,7 @@ def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
                 "sv": cells[mapping["sv"]] if "sv" in mapping and mapping["sv"] < len(cells) else "0",
                 "sv_pct": cells[mapping["sv_pct"]] if "sv_pct" in mapping and mapping["sv_pct"] < len(cells) else ".000",
                 "sho": cells[mapping["sho"]] if "sho" in mapping and mapping["sho"] < len(cells) else "0",
-                "w_l_t": cells[mapping["w_l_t"]] if "w_l_t" in mapping and mapping["w_l_t"] < len(cells) else "0-0-0",
+                "w_l_t": wlt_str,
                 "min": cells[mapping["min"]] if "min" in mapping and mapping["min"] < len(cells) else "0:00",
             }
             goalies.append(g)
@@ -625,7 +654,7 @@ def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
         record["sv"] = clean_stat_int(p.get("sv"))
         record["sv_pct"] = clean_stat_pct(p.get("sv_pct"))
         record["sho"] = clean_stat_int(p.get("sho"))
-        record["w_l_t"] = str(p.get("w_l_t") or "0-0-0")
+        record["w_l_t"] = clean_w_l_t(p.get("w_l_t") or "0-0-0")
         record["min"] = str(p.get("min") or "0:00")
     else:
         pn_pim = p.get("pn_pim", "")
@@ -740,10 +769,11 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             "players": merged,
         }
 
+        # Exclusively write to docs/<slug>.json
         os.makedirs("docs", exist_ok=True)
-        for path in [f"{slug}.json", os.path.join("docs", f"{slug}.json")]:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(team_data, f, indent=2)
+        doc_path = os.path.join("docs", f"{slug}.json")
+        with open(doc_path, "w", encoding="utf-8") as f:
+            json.dump(team_data, f, indent=2)
 
         return team_data
 
