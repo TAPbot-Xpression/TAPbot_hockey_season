@@ -2,7 +2,22 @@
 """
 scrape_nchc_hockey.py
 NCHC Men's Hockey player season stats + team stats scraper (Sidearm sites).
-Supports both conference and non-conference opponents via non_conf_config.json.
+
+Fixes applied:
+1. Strict Roster Filtering: Only rostered players appear in the output. All game-by-game
+   records, team splits, opponent match rows ("at Miami", "vs Air Force"), and stat labels
+   ("PENALTIES", "POINTS", "SAVES", "12.5", ".520") are completely filtered out.
+2. Section-Scoped Team Stats:
+   - Power Play%: extracts Home team conversion % (e.g. .222 -> 22.2%)
+   - Penalty Kill%: extracts Opponent conversion % (.235) and inverts to PK% (76.5%)
+   - Pen/G: extracts Home team penalties per game (e.g. 4.6)
+   - PIM/G: extracts Home team penalty minutes per game (e.g. 12.5)
+   - Faceoff%: extracts Home team faceoff % (e.g. .520 -> 52.0%)
+   - Goals/G, Shots/G, Shot% properly scoped without cross-contamination.
+3. Separate Goalie vs Skater Stats:
+   - Goalies (Pos G): gp_gs, ga, gaa, sv, sv_pct, w_l_t, min
+   - Skaters (Pos F/D): gp, g, a, pts, sh, blk, ppg, shg, gwg, pn_pim
+4. Non-Conference Support: Auto-loads non_conf_config.json if present.
 """
 
 from __future__ import annotations
@@ -87,7 +102,6 @@ TEAM_STAT_KEYS = [
     "pk_pct", "pen_per_game", "pim_per_game", "faceoff_pct",
 ]
 
-# ── Header & Field Aliases ───────────────────────────────────────────────────
 HEADER_ALIASES: Dict[str, List[str]] = {
     # Skater
     "gp": ["GP", "GAMES", "GAMESPLAYED", "GP-GS", "GP/GS"],
@@ -102,9 +116,6 @@ HEADER_ALIASES: Dict[str, List[str]] = {
     "pn_pim": ["PN-PIM", "PEN-PIM", "PEN-MIN", "PN-MIN", "PEN/PIM", "PN/PIM", "PENALTIES-PIM", "PENALTIES-MINUTES"],
     "pen": ["PEN", "PN", "PENALTIES", "PENS"],
     "pim": ["PIM", "PENALTYMINUTES", "PENMIN", "PENALTYMIN"],
-    "fow": ["FOW", "FACEOFFSWON"],
-    "fol": ["FOL", "FACEOFFSLOST"],
-    "fo_pct": ["FO%", "FOPCT", "FACEOFF%", "FACEOFFPCT"],
     # Goalie
     "gp_gs": ["GP-GS", "GP/GS", "GP_GS", "GAMES-STARTED", "GP-GS-MIN"],
     "ga": ["GA", "GOALSAGAINST"],
@@ -112,7 +123,7 @@ HEADER_ALIASES: Dict[str, List[str]] = {
     "sv": ["SV", "SAVES", "SVS"],
     "sv_pct": ["SV%", "SVPCT", "SAVE%", "SAVEPCT", "SVP", "PCT"],
     "w_l_t": ["W-L-T", "W-L-T-SHO", "RECORD", "WL", "W-L", "WLT"],
-    "min": ["MIN", "MINUTES", "TIME"],
+    "min": ["MIN", "MINUTES", "TIME", "TOI"],
 }
 
 NUXT_ALIASES: Dict[str, List[str]] = {
@@ -137,17 +148,11 @@ NUXT_ALIASES: Dict[str, List[str]] = {
     "min": ["minutes", "min", "timeOnIce"],
 }
 
-def _nk(text: Any) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(text).lower())
-
-def _hk(text: str) -> str:
-    return re.sub(r"[^A-Z0-9%/+\-]", "", (text or "").upper().replace("–", "-").replace("—", "-"))
-
-HEADER_LOOKUP: Dict[str, str] = {_hk(a): f for f, lst in HEADER_ALIASES.items() for a in lst}
-NUXT_LOOKUP = {f: [_nk(a) for a in lst] for f, lst in NUXT_ALIASES.items()}
-ROW_FIELDS = list(HEADER_ALIASES.keys())
-NAME_HEADERS = {"PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "GOALTENDER", "SKATER"}
-NUM_HEADERS = {"#", "no", "no.", "jersey", "num", "number", "uniform"}
+DISCARD_TERMS = {
+    "team", "tm", "total", "totals", "opponent", "opponents", "opp", "season", "overall",
+    "conference", "goals", "assists", "points", "shots", "penalties", "penalty minutes",
+    "power play goals", "saves", "unassigned", "scoring", "averages", "minutes", "view bio"
+}
 
 _POS_MAP = {
     "G": "G", "GK": "G", "GOALIE": "G", "GOALTENDER": "G", "GOALKEEPER": "G", "GOALTENDERS": "G",
@@ -164,6 +169,18 @@ _CLASS_MAP = {
     "SR": "SR", "SENIOR": "SR", "FOURTH": "SR", "4TH": "SR",
     "GR": "GR", "GRAD": "GR", "GRADUATE": "GR", "GS": "GR", "FIFTH": "GR", "5TH": "GR",
 }
+
+def _nk(text: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(text).lower())
+
+def _hk(text: str) -> str:
+    return re.sub(r"[^A-Z0-9%/+\-]", "", (text or "").upper().replace("–", "-").replace("—", "-"))
+
+HEADER_LOOKUP: Dict[str, str] = {_hk(a): f for f, lst in HEADER_ALIASES.items() for a in lst}
+NUXT_LOOKUP = {f: [_nk(a) for a in lst] for f, lst in NUXT_ALIASES.items()}
+ROW_FIELDS = list(HEADER_ALIASES.keys())
+NAME_HEADERS = {"PLAYER", "NAME", "PLAYERNAME", "FULLNAME", "ATHLETE", "GOALTENDER", "SKATER"}
+NUM_HEADERS = {"#", "no", "no.", "jersey", "num", "number", "uniform"}
 
 def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -256,6 +273,19 @@ def _f(x: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
+
+def is_valid_player_candidate(name: str) -> bool:
+    if not name or len(name) < 3:
+        return False
+    low = name.lower().strip()
+    if low in DISCARD_TERMS:
+        return False
+    if low.startswith("at ") or low.startswith("vs ") or low.startswith("#"):
+        return False
+    # Filter out pure numbers, dates, or split stats
+    if re.match(r"^[\d\.\-\s/%:]+$", low):
+        return False
+    return True
 
 # ── Non-Conference Config Loader ─────────────────────────────────────────────
 def load_non_conf_config() -> List[Dict[str, Any]]:
@@ -387,7 +417,7 @@ def parse_print_roster(html: str) -> Dict[str, Dict[str, str]]:
                 yr = normalize_year(col)
                 continue
             c_clean = clean_name(col)
-            if not name_cand and len(c_clean) > 2:
+            if not name_cand and is_valid_player_candidate(c_clean):
                 name_cand = c_clean
         if name_cand:
             _add_roster(roster_lookup, name_cand, num, pos, yr)
@@ -431,10 +461,9 @@ def parse_nuxt_data_stats(html: str) -> Tuple[List[Dict[str, Any]], Dict[str, st
             for item in data:
                 if not isinstance(item, dict):
                     continue
-                if any(k in item for k in ("boxscoreUrl", "opponent", "winOrLoss")):
+                if any(k in item for k in ("boxscoreUrl", "opponent", "winOrLoss", "gameDate")):
                     continue
 
-                # Flatten sub-dictionaries if present
                 flat: Dict[str, Any] = {}
                 for k, v in item.items():
                     res = resolve(v)
@@ -468,7 +497,7 @@ def parse_nuxt_data_stats(html: str) -> Tuple[List[Dict[str, Any]], Dict[str, st
                     continue
 
                 c_name = clean_name(raw_name)
-                if not c_name or c_name.lower() in ("total", "totals", "team"):
+                if not is_valid_player_candidate(c_name):
                     continue
 
                 raw_num = flat.get("jersey") or flat.get("number") or flat.get("uniform") or ""
@@ -499,6 +528,12 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
     totals: Dict[str, str] = {}
 
     for table in soup.find_all("table"):
+        # Explicitly skip team split tables and game results
+        prev_heading = table.find_previous(["h2", "h3", "h4", "caption", "div"])
+        prev_text = prev_heading.get_text(" ", strip=True).upper() if prev_heading else ""
+        if any(bad in prev_text for bad in ["GAME RESULTS", "OVERALL TEAM STATS", "TEAM STATISTICS", "GOALS BY PERIOD", "SHOTS BY PERIOD"]):
+            continue
+
         rows = table.find_all("tr")
         if len(rows) < 2:
             continue
@@ -511,7 +546,11 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
             if f:
                 mapping[f] = idx
 
-        is_goalie_table = ("gaa" in mapping) or ("sv_pct" in mapping) or ("saves" in mapping)
+        # Must have at least 2 recognized hockey stat columns to be a valid player table
+        if len(mapping) < 2:
+            continue
+
+        is_goalie_table = ("gaa" in mapping) or ("sv_pct" in mapping) or ("sv" in mapping)
 
         name_idx = None
         for idx, col in enumerate(cols):
@@ -526,7 +565,7 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
 
             raw_name = cells[name_idx] if name_idx is not None and name_idx < len(cells) else cells[1]
             c_name = clean_name(raw_name)
-            if not c_name or c_name.lower() in ("total", "totals", "team", "opponent", "opponents"):
+            if not is_valid_player_candidate(c_name):
                 continue
 
             fields = {f: cells[mapping[f]] for f in mapping if mapping[f] < len(cells)}
@@ -545,19 +584,21 @@ def parse_stats_tables(soup: BeautifulSoup) -> Tuple[List[Dict[str, Any]], Dict[
     return players, totals
 
 # ── Section-Aware Team Stats Parser ──────────────────────────────────────────
-def parse_team_stats(soup: BeautifulSoup, totals: Dict[str, str]) -> Dict[str, str]:
+def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
     """
-    Parses Sidearm's team stats tables using section headers:
-    POWER PLAY -> Conversion Percentage (Col 1: Home, Col 2: Opponent)
-    PENALTIES  -> Per Game, Minutes Per Game
-    FACEOFFS   -> Percentage
+    Parses Sidearm's team statistics table by section to prevent value collisions.
+    Sections:
+    - POWER PLAYS / POWER PLAY: Conversion Percentage (Col 1: Home, Col 2: Opponent -> Invert to PK%)
+    - PENALTIES: Per Game (Col 1: Pen/G), Minutes Per Game (Col 1: PIM/G)
+    - FACEOFFS: Percentage (Col 1: Faceoff %)
+    - GOALS / SHOTS: Goals/Game, Shots/Game, Shot %
     """
     found: Dict[str, str] = {}
     current_section = ""
 
     for table in soup.find_all("table"):
         # Check previous heading or caption for section context
-        heading = table.find_previous(["h2", "h3", "h4", "caption", "div"])
+        heading = table.find_previous(["h2", "h3", "h4", "caption"])
         if heading:
             h_text = heading.get_text(" ", strip=True).upper()
             if "POWER PLAY" in h_text:
@@ -580,20 +621,27 @@ def parse_team_stats(soup: BeautifulSoup, totals: Dict[str, str]) -> Dict[str, s
             val_team = cells[1].strip() if len(cells) > 1 else ""
             val_opp = cells[2].strip() if len(cells) > 2 else ""
 
-            # Check if row is a section header inside table
+            # Check if current row acts as a section divider
             if "power play" in label:
                 current_section = "POWER_PLAY"
             elif "penalt" in label:
                 current_section = "PENALTIES"
             elif "faceoff" in label:
                 current_section = "FACEOFFS"
+            elif "goals" in label:
+                current_section = "GOALS"
+            elif "shots" in label:
+                current_section = "SHOTS"
 
             # 1. Power Play Conversion % & Opponent PP Kill %
-            if "conversion percentage" in label or "pp pct" in label or ("percentage" in label and current_section == "POWER_PLAY"):
+            if "conversion percentage" in label or (current_section == "POWER_PLAY" and "percentage" in label):
                 if val_team:
-                    found["pp_pct"] = clean_stat_pct(val_team)
+                    pp_val = _f(val_team)
+                    if pp_val is not None:
+                        if pp_val <= 1.0:
+                            pp_val *= 100.0
+                        found["pp_pct"] = f"{pp_val:.1f}%"
                 if val_opp:
-                    # Invert opponent power play % into penalty kill %
                     opp_float = _f(val_opp)
                     if opp_float is not None:
                         if opp_float > 1.0:
@@ -601,18 +649,18 @@ def parse_team_stats(soup: BeautifulSoup, totals: Dict[str, str]) -> Dict[str, s
                         pk_val = (1.0 - opp_float) * 100.0
                         found["pk_pct"] = f"{pk_val:.1f}%"
 
-            # 2. Penalties Per Game
-            if ("per game" in label or "pen/g" in label) and current_section == "PENALTIES":
+            # 2. Penalties Per Game (Pen/G)
+            if ("per game" in label or "pen/g" in label or "penalties per game" in label) and current_section == "PENALTIES":
                 if val_team and "pen_per_game" not in found:
                     found["pen_per_game"] = val_team
 
             # 3. Penalty Minutes Per Game (PIM/G)
-            if ("minutes per game" in label or "pim/g" in label or "pim per game" in label):
+            if ("minutes per game" in label or "pim/g" in label or "minutes/game" in label) and current_section == "PENALTIES":
                 if val_team and "pim_per_game" not in found:
                     found["pim_per_game"] = val_team
 
             # 4. Faceoff %
-            if ("percentage" in label or "pct" in label or "faceoff" in label) and current_section == "FACEOFFS":
+            if ("percentage" in label or "faceoff %" in label or "pct" in label) and current_section == "FACEOFFS":
                 if val_team and "faceoff_pct" not in found:
                     f_val = _f(val_team)
                     if f_val is not None:
@@ -620,22 +668,24 @@ def parse_team_stats(soup: BeautifulSoup, totals: Dict[str, str]) -> Dict[str, s
                             f_val *= 100.0
                         found["faceoff_pct"] = f"{f_val:.1f}%"
 
-            # 5. Goals & Shots Per Game
-            if "goals/game" in label or "goals per game" in label or ("per game" in label and current_section == "GOALS"):
-                found.setdefault("goals_per_game", val_team)
-            if "shots/game" in label or "shots per game" in label or ("per game" in label and current_section == "SHOTS"):
-                found.setdefault("shots_per_game", val_team)
-            if "shot percentage" in label or "shot pct" in label or "shot %" in label:
-                found.setdefault("shot_pct", clean_stat_pct(val_team))
+            # 5. Goals & Shots Per Game & Shot %
+            if ("per game" in label or "goals/game" in label) and current_section == "GOALS":
+                if val_team and "goals_per_game" not in found:
+                    found["goals_per_game"] = val_team
+            if ("per game" in label or "shots/game" in label) and current_section == "SHOTS":
+                if val_team and "shots_per_game" not in found:
+                    found["shots_per_game"] = val_team
+            if ("shot percentage" in label or "shot pct" in label or "percentage" in label) and current_section == "SHOTS":
+                if val_team and "shot_pct" not in found:
+                    s_val = _f(val_team)
+                    if s_val is not None:
+                        if s_val <= 1.0:
+                            s_val *= 100.0
+                        found["shot_pct"] = f"{s_val:.1f}%"
 
-    # Format team stats
     result: Dict[str, str] = {}
     for k in TEAM_STAT_KEYS:
-        val = found.get(k, "-")
-        if val != "-" and not val.endswith("%") and ("pct" in k):
-            pct_f = _f(val)
-            val = f"{pct_f * 100:.1f}%" if pct_f and pct_f <= 1.0 else f"{val}%"
-        result[k] = val
+        result[k] = found.get(k, "-")
 
     return result
 
@@ -690,40 +740,43 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
         )
 
         stats_players: List[Dict[str, Any]] = []
-        totals: Dict[str, str] = {}
         style = "none"
 
         if stats_html:
             # 1. Try Nuxt Data first
-            stats_players, totals = parse_nuxt_data_stats(stats_html)
+            stats_players, _ = parse_nuxt_data_stats(stats_html)
             style = "New Style (Nuxt data)"
 
-            # Check if Nuxt stats came back empty or all zeros for goals/points
             active_skaters = [p for p in stats_players if not p.get("is_goalie")]
             has_scoring = any((_f(p.get("pts")) or 0) > 0 for p in active_skaters)
 
             # 2. Fallback to HTML table parsing if Nuxt data had 0s
             if not stats_players or not has_scoring:
                 soup = BeautifulSoup(stats_html, "html.parser")
-                table_players, t_totals = parse_stats_tables(soup)
+                table_players, _ = parse_stats_tables(soup)
                 if len(table_players) >= len(stats_players):
                     stats_players = table_players
-                    totals = t_totals
                     style = "Old Style (HTML tables)"
 
         soup = BeautifulSoup(stats_html or "", "html.parser")
-        team_stats = parse_team_stats(soup, totals)
+        team_stats = parse_team_stats(soup)
 
-        # Merge roster data with player stats
+        # Merge roster data with player stats - STRICT ROSTER CHECK
         merged: List[Dict[str, str]] = []
         seen = set()
+
         for sp in stats_players:
             name = sp.get("name", "")
-            if not name or name.lower() in seen:
+            if not name or name.lower() in seen or not is_valid_player_candidate(name):
                 continue
-            seen.add(name.lower())
 
             r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
+
+            # Roster Gate: If roster was loaded, ensure the player actually exists on the roster
+            if roster_lookup and len(roster_lookup) >= 5 and not r_info:
+                continue
+
+            seen.add(name.lower())
             p = dict(sp)
             if r_info:
                 p["name"] = r_info.get("name") or name
