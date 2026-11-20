@@ -4,19 +4,19 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-20T19:59:35Z",
+  "generated_at": "2026-11-20T20:13:13Z",
   "source_stats_url": "https://cctigers.com/sports/mens-ice-hockey/stats/2026-2027",
   "source_roster_url": "https://cctigers.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "Old Style (jQuery UI tabs)",
   "team_stats": {
-    "goals_per_game": "-",
-    "shots_per_game": "-",
-    "shot_pct": "-",
-    "pp_pct": "-",
-    "pk_pct": "-",
+    "goals_per_game": "3.3",
+    "shots_per_game": "29.3",
+    "shot_pct": "11.1%",
+    "pp_pct": "23.1%",
+    "pk_pct": "89.2%",
     "pen_per_game": "-",
-    "pim_per_game": "-",
-    "faceoff_pct": "-"
+    "pim_per_game": "8.5",
+    "faceoff_pct": "51.4%"
   },
   "players": [
     {
