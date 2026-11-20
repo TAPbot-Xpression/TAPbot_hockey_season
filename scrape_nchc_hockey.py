@@ -839,73 +839,113 @@ def _pct_str(raw: Any) -> Optional[str]:
         v *= 100.0
     return f"{v:.1f}%"
 
-def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
-    """
-    Old-style Team tab. Section titles are single-cell rows; stat rows are
-    [label, team value, opponent value]. Values like .111 / .231 are decimals.
-    """
+def _norm(text: Any) -> str:
+    """Lower-case and collapse ALL whitespace (including &nbsp;) to single spaces."""
+    return " ".join(str(text).split()).lower()
+
+def _team_table_rows(soup: BeautifulSoup) -> List[List[str]]:
+    """Rows of the first team table (normalized cell text), preferring 'Overall Team'."""
     tables = soup.find_all("table")
     ordered = [t for t in tables if "team" in _table_caption(t) and "conference" not in _table_caption(t)]
-    ordered += [t for t in tables if t not in ordered]
-
-    found: Dict[str, str] = {}
+    ordered += [t for t in tables if not any(t is o for o in ordered)]
     for table in ordered:
-        section = ""
-        for row in table.find_all("tr"):
-            cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
-            if not cells:
-                continue
-            # Section title rows: a known title with every other cell empty
-            # (the site may or may not render trailing empty cells).
-            if cells[0].strip().lower() in _OLD_SECTIONS and not any(c.strip() for c in cells[1:]):
-                section = _OLD_SECTIONS[cells[0].strip().lower()]
-                continue
-            if len(cells) < 2:
-                continue
+        rows = [[" ".join(c.get_text(" ", strip=True).split()) for c in r.find_all(["td", "th"])]
+                for r in table.find_all("tr")]
+        flat = " | ".join(r[0].lower() for r in rows if r)
+        if "goals per game" in flat or "shots per game" in flat or "conversion percentage" in flat:
+            return rows
+    return []
 
-            label = cells[0].strip().lower()
-            team_val = cells[1].strip()
-            opp_val = cells[2].strip() if len(cells) > 2 else ""
+def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
+    """
+    Old-style Team tab: rows are [label, team value, opponent value] grouped under
+    section title rows (Shots / Power Plays / Goal Breakdown / Penalties / Faceoffs).
+    Values like .111 / .231 are decimals. Section titles are detected by name, and
+    if the page's markup hides them, by anchor rows (Goals-Shots, Goals-Opportunities,
+    Hat Tricks, Won-Lost).
+    """
+    found: Dict[str, str] = {}
+    section = ""
+    pending_pen = False
 
-            if section == "SHOTS":
-                if label == "goals per game" and "goals_per_game" not in found and team_val:
-                    found["goals_per_game"] = team_val
-                elif label == "shot percentage" and "shot_pct" not in found:
-                    s = _pct_str(team_val)
-                    if s:
-                        found["shot_pct"] = s
-                elif label == "shots per game" and "shots_per_game" not in found and team_val:
-                    found["shots_per_game"] = team_val
+    for cells in _team_table_rows(soup):
+        if not cells:
+            continue
+        n0 = _norm(cells[0])
+        rest_empty = not any(c.strip() for c in cells[1:])
 
-            elif section == "POWER_PLAYS":
-                if label == "conversion percentage":
-                    if "pp_pct" not in found:
-                        s = _pct_str(team_val)
-                        if s:
-                            found["pp_pct"] = s
-                    if "pk_pct" not in found:
-                        opp = _f(opp_val)
-                        if opp is not None:
-                            if opp > 1.0:
-                                opp /= 100.0
-                            found["pk_pct"] = f"{(1.0 - opp) * 100.0:.1f}%"
+        if n0 in _OLD_SECTIONS and rest_empty:
+            section = _OLD_SECTIONS[n0]
+            pending_pen = False
+            continue
+        if len(cells) < 2:
+            continue
 
-            elif section == "PENALTIES":
-                if label == "per game" and "pen_per_game" not in found and team_val:
-                    found["pen_per_game"] = team_val
-                elif label == "minutes per game" and "pim_per_game" not in found and team_val:
-                    found["pim_per_game"] = team_val
+        # Anchor rows (fallback section detection)
+        if n0 == "goals-shots":
+            section = "SHOTS"
+        elif n0 == "goals-opportunities":
+            section = "POWER_PLAYS"
+        elif n0 == "won-lost":
+            section = "FACEOFFS"
+        elif n0 in ("hat tricks", "empty net", "short handed", "unassisted"):
+            section = "GOALS"
+            pending_pen = (n0 == "hat tricks")
+        elif pending_pen:
+            section = "PENALTIES"
+            pending_pen = False
 
-            elif section == "FACEOFFS":
-                if label == "percentage" and "faceoff_pct" not in found:
-                    s = _pct_str(team_val)
-                    if s:
-                        found["faceoff_pct"] = s
+        team_val = cells[1].strip()
+        opp_val = cells[2].strip() if len(cells) > 2 else ""
 
-        if len(found) == len(TEAM_STAT_KEYS):
-            break
+        if section == "SHOTS":
+            if "goals per game" in n0 and "goals_per_game" not in found and team_val:
+                found["goals_per_game"] = team_val
+            elif ("shot percentage" in n0 or "shot pct" in n0) and "shot_pct" not in found:
+                v = _pct_str(team_val)
+                if v:
+                    found["shot_pct"] = v
+            elif "shots per game" in n0 and "shots_per_game" not in found and team_val:
+                found["shots_per_game"] = team_val
+
+        elif section == "POWER_PLAYS":
+            if "conversion" in n0 or "percentage" in n0:
+                if "pp_pct" not in found:
+                    v = _pct_str(team_val)
+                    if v:
+                        found["pp_pct"] = v
+                if "pk_pct" not in found:
+                    opp = _f(opp_val)
+                    if opp is not None:
+                        if opp > 1.0:
+                            opp /= 100.0
+                        found["pk_pct"] = f"{(1.0 - opp) * 100.0:.1f}%"
+
+        elif section == "PENALTIES":
+            if n0 in ("per game", "penalties per game") and "pen_per_game" not in found and team_val:
+                found["pen_per_game"] = team_val
+            elif "minutes per game" in n0 and "pim_per_game" not in found and team_val:
+                found["pim_per_game"] = team_val
+
+        elif section == "FACEOFFS":
+            if ("percentage" in n0 or "pct" in n0) and "faceoff_pct" not in found:
+                v = _pct_str(team_val)
+                if v:
+                    found["faceoff_pct"] = v
 
     return {k: found.get(k, "-") for k in TEAM_STAT_KEYS}
+
+def team_debug_dump(soup: BeautifulSoup, max_rows: int = 60) -> str:
+    """Compact text description of the page's tables, for the Actions log."""
+    lines = [f"tables on page: {len(soup.find_all('table'))}"]
+    for i, t in enumerate(soup.find_all("table")[:12]):
+        lines.append(f"  table[{i}] caption={_table_caption(t)!r} rows={len(t.find_all('tr'))}")
+    rows = _team_table_rows(soup)
+    if not rows:
+        lines.append("no table containing team-stat labels was found")
+    for r in rows[:max_rows]:
+        lines.append("  " + repr(r))
+    return "\n".join(lines)
 
 async def _ensure_ui_tab(page: Page, panel_id: str) -> bool:
     """
@@ -1132,12 +1172,10 @@ async def scrape_single_team_old_style(context: BrowserContext, team_cfg: Dict[s
             if not goalies:
                 logger.warning(f"[{label}] No goalies parsed from Goaltenders table.")
             if all(v == "-" for v in team_stats.values()):
-                logger.warning(f"[{label}] No team stats parsed; saving docs/debug_{slug}_team.html")
-                with open(os.path.join("docs", f"debug_{slug}_team.html"), "w", encoding="utf-8") as f:
+                logger.warning(f"[{label}] No team stats parsed. Team tab table dump:\n{team_debug_dump(soup_team)}")
+                os.makedirs("debug", exist_ok=True)
+                with open(os.path.join("debug", f"{slug}_team.html"), "w", encoding="utf-8") as f:
                     f.write(str(soup_team))
-
-            logger.info(f"[{label}] parsed {len(skaters)} skaters, {len(goalies)} goalies, "
-                        f"{sum(1 for v in team_stats.values() if v != '-')}/{len(TEAM_STAT_KEYS)} team stats")
         except Exception as e:
             logger.error(f"[{label}] Error navigating stats page: {e}")
         finally:
