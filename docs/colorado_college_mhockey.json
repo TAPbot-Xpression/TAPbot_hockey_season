@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-20T19:45:08Z",
+  "generated_at": "2026-11-20T19:59:35Z",
   "source_stats_url": "https://cctigers.com/sports/mens-ice-hockey/stats/2026-2027",
   "source_roster_url": "https://cctigers.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "Old Style (jQuery UI tabs)",
@@ -19,6 +19,36 @@
     "faceoff_pct": "-"
   },
   "players": [
+    {
+      "number": "32",
+      "name": "Michal Pradel",
+      "position": "G",
+      "year": "FR",
+      "is_goalie": "true",
+      "gp_gs": "2-0",
+      "ga": "0",
+      "gaa": "0.00",
+      "sv": "5",
+      "sv_pct": "1.000",
+      "sho": "0",
+      "w_l_t": "0-0-0",
+      "min": "11:36"
+    },
+    {
+      "number": "30",
+      "name": "Jackson Unger",
+      "position": "G",
+      "year": "SO",
+      "is_goalie": "true",
+      "gp_gs": "12-12",
+      "ga": "24",
+      "gaa": "2.01",
+      "sv": "331",
+      "sv_pct": ".932",
+      "sho": "2",
+      "w_l_t": "7-4-1",
+      "min": "716:24"
+    },
     {
       "number": "7",
       "name": "Philippe Blais-Savoie",
@@ -375,36 +405,6 @@
       "shg": "0",
       "gwg": "0",
       "pn_pim": "0-0"
-    },
-    {
-      "number": "32",
-      "name": "Michal Pradel",
-      "position": "G",
-      "year": "FR",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
-    },
-    {
-      "number": "30",
-      "name": "Jackson Unger",
-      "position": "G",
-      "year": "SO",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
     }
   ]
 }

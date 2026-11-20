@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-20T19:45:19Z",
+  "generated_at": "2026-11-20T19:59:50Z",
   "source_stats_url": "https://wmubroncos.com/sports/mens-ice-hockey/stats",
   "source_roster_url": "https://wmubroncos.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "Old Style (jQuery UI tabs)",
@@ -19,6 +19,51 @@
     "faceoff_pct": "-"
   },
   "players": [
+    {
+      "number": "29",
+      "name": "Quentin Miller",
+      "position": "G",
+      "year": "SO",
+      "is_goalie": "true",
+      "gp_gs": "11-11",
+      "ga": "20",
+      "gaa": "1.80",
+      "sv": "224",
+      "sv_pct": ".918",
+      "sho": "3",
+      "w_l_t": "8-2-1",
+      "min": "668:19"
+    },
+    {
+      "number": "35",
+      "name": "Gavin Moffatt",
+      "position": "G",
+      "year": "SO",
+      "is_goalie": "true",
+      "gp_gs": "2-0",
+      "ga": "0",
+      "gaa": "0.00",
+      "sv": "0",
+      "sv_pct": ".000",
+      "sho": "0",
+      "w_l_t": "0-0-0",
+      "min": "00:00"
+    },
+    {
+      "number": "37",
+      "name": "Michael Polston",
+      "position": "G",
+      "year": "JR",
+      "is_goalie": "true",
+      "gp_gs": "2-0",
+      "ga": "0",
+      "gaa": "0.00",
+      "sv": "0",
+      "sv_pct": ".000",
+      "sho": "0",
+      "w_l_t": "0-0-0",
+      "min": "00:00"
+    },
     {
       "number": "18",
       "name": "William Whitelaw",
@@ -392,51 +437,6 @@
       "shg": "0",
       "gwg": "0",
       "pn_pim": "0-0"
-    },
-    {
-      "number": "29",
-      "name": "Quentin Miller",
-      "position": "G",
-      "year": "SO",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
-    },
-    {
-      "number": "35",
-      "name": "Gavin Moffatt",
-      "position": "G",
-      "year": "SO",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
-    },
-    {
-      "number": "37",
-      "name": "Michael Polston",
-      "position": "G",
-      "year": "JR",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
     }
   ]
 }

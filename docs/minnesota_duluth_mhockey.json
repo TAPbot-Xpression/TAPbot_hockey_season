@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-20T19:45:16Z",
+  "generated_at": "2026-11-20T19:59:47Z",
   "source_stats_url": "https://umdbulldogs.com/sports/mens-ice-hockey/stats",
   "source_roster_url": "https://umdbulldogs.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "Old Style (jQuery UI tabs)",
@@ -19,6 +19,36 @@
     "faceoff_pct": "-"
   },
   "players": [
+    {
+      "number": "38",
+      "name": "Carl Axelsson",
+      "position": "G",
+      "year": "FR",
+      "is_goalie": "true",
+      "gp_gs": "12-12",
+      "ga": "13",
+      "gaa": "1.07",
+      "sv": "257",
+      "sv_pct": ".952",
+      "sho": "5",
+      "w_l_t": "8-2-2",
+      "min": "725:59"
+    },
+    {
+      "number": "35",
+      "name": "Ethan Dahlmeir",
+      "position": "G",
+      "year": "JR",
+      "is_goalie": "true",
+      "gp_gs": "2-2",
+      "ga": "8",
+      "gaa": "4.01",
+      "sv": "45",
+      "sv_pct": ".849",
+      "sho": "0",
+      "w_l_t": "1-1-0",
+      "min": "119:50"
+    },
     {
       "number": "2",
       "name": "Ty Hanson",
@@ -326,21 +356,6 @@
       "pn_pim": "0-0"
     },
     {
-      "number": "38",
-      "name": "Carl Axelsson",
-      "position": "G",
-      "year": "FR",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
-    },
-    {
       "number": "19",
       "name": "Harper Bentz",
       "position": "F",
@@ -373,21 +388,6 @@
       "shg": "0",
       "gwg": "0",
       "pn_pim": "8-16"
-    },
-    {
-      "number": "35",
-      "name": "Ethan Dahlmeir",
-      "position": "G",
-      "year": "JR",
-      "is_goalie": "true",
-      "gp_gs": "0-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0-0-0",
-      "min": "0:00"
     },
     {
       "number": "28",
