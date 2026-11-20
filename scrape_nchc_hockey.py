@@ -922,7 +922,8 @@ def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
                         found["pk_pct"] = f"{(1.0 - opp) * 100.0:.1f}%"
 
         elif section == "PENALTIES":
-            if n0 in ("per game", "penalties per game") and "pen_per_game" not in found and team_val:
+            # Label cell can hold two spans, e.g. "Per Game PN/AVG", so match loosely.
+            if "per game" in n0 and "minute" not in n0 and "pen_per_game" not in found and team_val:
                 found["pen_per_game"] = team_val
             elif "minutes per game" in n0 and "pim_per_game" not in found and team_val:
                 found["pim_per_game"] = team_val
