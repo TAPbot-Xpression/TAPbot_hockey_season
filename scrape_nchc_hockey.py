@@ -855,8 +855,10 @@ def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
             cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
             if not cells:
                 continue
-            if len(cells) == 1:
-                section = _OLD_SECTIONS.get(cells[0].strip().lower(), section)
+            # Section title rows: a known title with every other cell empty
+            # (the site may or may not render trailing empty cells).
+            if cells[0].strip().lower() in _OLD_SECTIONS and not any(c.strip() for c in cells[1:]):
+                section = _OLD_SECTIONS[cells[0].strip().lower()]
                 continue
             if len(cells) < 2:
                 continue
@@ -1115,13 +1117,24 @@ async def scrape_single_team_old_style(context: BrowserContext, team_cfg: Dict[s
             await _ensure_ui_tab(page, "individual-overall-skaters")
             soup_sk = BeautifulSoup(await page.content(), "html.parser")
             skaters = parse_skaters_table_grouped(soup_sk)
-            raw_players.extend(skaters)
 
             # 3. Individual -> Overall -> Goaltenders
             await _ensure_ui_tab(page, "individual-overall-goaltenders")
-            soup_gk = BeautifulSoup(await page.content(), "html.parser")
+            html_gk = await page.content()
+            soup_gk = BeautifulSoup(html_gk, "html.parser")
             goalies = parse_goalies_table_grouped(soup_gk)
+
+            # Goalies also appear (zero-filled) in the Skaters grid, so goalies go FIRST
+            # and win the name de-duplication in the merge step below.
             raw_players.extend(goalies)
+            raw_players.extend(skaters)
+
+            if not goalies:
+                logger.warning(f"[{label}] No goalies parsed from Goaltenders table.")
+            if all(v == "-" for v in team_stats.values()):
+                logger.warning(f"[{label}] No team stats parsed; saving docs/debug_{slug}_team.html")
+                with open(os.path.join("docs", f"debug_{slug}_team.html"), "w", encoding="utf-8") as f:
+                    f.write(str(soup_team))
 
             logger.info(f"[{label}] parsed {len(skaters)} skaters, {len(goalies)} goalies, "
                         f"{sum(1 for v in team_stats.values() if v != '-')}/{len(TEAM_STAT_KEYS)} team stats")
