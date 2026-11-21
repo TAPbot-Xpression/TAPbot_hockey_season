@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "Non-Conference",
-  "generated_at": "2026-11-20T20:22:10Z",
+  "generated_at": "2026-11-21T09:46:11Z",
   "source_stats_url": "https://bsubeavers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://bsubeavers.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "HTML tables",
@@ -25,14 +25,14 @@
       "position": "G",
       "year": "SO",
       "is_goalie": "true",
-      "gp_gs": "9-9",
+      "gp_gs": "10-10",
       "ga": "0",
       "gaa": "0.00",
       "sv": "3",
       "sv_pct": ".000",
       "sho": "0",
       "w_l_t": "6",
-      "min": "492:37"
+      "min": "557:37"
     },
     {
       "number": "35",
@@ -40,7 +40,7 @@
       "position": "G",
       "year": "SR",
       "is_goalie": "true",
-      "gp_gs": "3-2",
+      "gp_gs": "4-2",
       "ga": "0",
       "gaa": "0.00",
       "sv": "3",
@@ -48,6 +48,21 @@
       "sho": "0",
       "w_l_t": "4",
       "min": "168:39"
+    },
+    {
+      "number": "30",
+      "name": "Trent Wiemken",
+      "position": "G",
+      "year": "JR",
+      "is_goalie": "true",
+      "gp_gs": "1-0",
+      "ga": "0",
+      "gaa": "0.00",
+      "sv": "0",
+      "sv_pct": ".000",
+      "sho": "0",
+      "w_l_t": "0",
+      "min": "00:00"
     }
   ]
 }
