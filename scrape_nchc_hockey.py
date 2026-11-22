@@ -3,33 +3,14 @@
 scrape_nchc_hockey.py
 NCHC Men's Hockey player season stats + team stats scraper.
 
-Key Updates:
-1. Team Stats Tab Selection (New Style Sidearm):
-   - Clicks the 'Team Stats' tab (<button data-test-id="s-tab__link"> Team Stats </button>)
-     to load the official team summary table.
-2. Section-Scoped Team Stats Extraction:
-   - [Shots Group]:
-       * Goals Per Game -> goals_per_game (e.g. 2.5)
-       * Shot Percentage -> shot_pct (e.g. 8.3%)
-       * Shots Per Game -> shots_per_game (e.g. 30.2)
-   - [Power Plays Group]:
-       * Conversion Percentage (Home) -> pp_pct (e.g. 22.2%)
-       * Conversion Percentage (Opponent) -> inverted to Home PK% (1.000 - 0.235 = 76.5%) -> pk_pct
-   - [Penalties Group]:
-       * Per Game -> pen_per_game (e.g. 4.6)
-       * Minutes Per Game -> pim_per_game (e.g. 12.5)
-   - [Faceoffs Group]:
-       * Percentage -> faceoff_pct (e.g. 52.0%)
-3. Goaltender Record:
-   - Parses individual 'W', 'L', and 'T' columns into 'W-L-T' format (e.g., 3-3-0).
-4. Output Directory:
-   - Exclusively saves JSON files to 'docs/<slug>.json'.
-   - Non-conference opponent is strictly saved as 'docs/non_conf_mhockey.json'.
-5. Old-Style Sites (style == "old", e.g. Colorado College) use their own pipeline
-   (scrape_single_team_old_style); the new-style pipeline is untouched:
-   - Confirms jQuery UI tab selection (<li role="tab" aria-controls="team" aria-selected="true">).
-   - Player tables have two-row grouped headers; parsed via colspan/rowspan flattening.
-   - Team stats section titles are single-cell rows; parsed by section.
+Supports:
+1. New-Style Sidearm (Vue/Nuxt dropdowns + Tab buttons, e.g., St. Thomas, Denver, Omaha, Miami, St. Cloud State)
+2. Old-Style Sidearm (jQuery UI tabs with grouped table headers, e.g., Colorado College, North Dakota, UMD, Western Michigan)
+3. Arizona State WMT Digital layout (thesundevils.com, static pre-rendered DOM tables)
+4. Non-Conference opponent (non_conf_config.json -> docs/non_conf_mhockey.json)
+
+Output:
+Exclusively writes JSON files to 'docs/<slug>.json'.
 """
 
 from __future__ import annotations
@@ -72,7 +53,7 @@ TEAMS_CONFIG = [
     {
         "name": "Arizona State", "slug": "arizona_state_mhockey", "style": "asu",
         "stats_url": "https://thesundevils.com/sports/ice-hockey/stats",
-        "roster_url": "https://thesundevils.com/sports/ice-hockey/roster?view=list",
+        "roster_url": "https://thesundevils.com/sports/ice-hockey/roster?view=table",
     },
     {
         "name": "Denver", "slug": "denver_mhockey", "style": "new",
@@ -114,7 +95,8 @@ TEAM_STAT_KEYS = [
 DISCARD_TERMS = {
     "team", "tm", "total", "totals", "opponent", "opponents", "opp", "season", "overall",
     "conference", "goals", "assists", "points", "shots", "penalties", "penalty minutes",
-    "power play goals", "saves", "unassigned", "scoring", "averages", "minutes", "view bio"
+    "power play goals", "saves", "unassigned", "scoring", "averages", "minutes", "view bio",
+    "arizona st.", "arizona state", "sun devils"
 }
 
 _POS_MAP = {
@@ -308,6 +290,7 @@ async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> 
         html = await page.content()
         soup = BeautifulSoup(html, "html.parser")
 
+        # 1. Parse standard table rows (Print Roster & WMT ?view=table)
         for row in soup.find_all("tr"):
             cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
             if len(cells) < 3:
@@ -329,8 +312,9 @@ async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> 
             if name_cand:
                 _add_roster(roster_lookup, name_cand, num, pos, yr)
 
-        for card in soup.select('[class*="roster-player"], [class*="s-person-card"]'):
-            name_el = card.select_one('[class*="player-name"], [class*="name"] a, a[href*="/roster/"]')
+        # 2. Parse card / list view items (Sidearm & WMT roster card layouts)
+        for card in soup.select('[class*="roster-player"], [class*="s-person-card"], [class*="player-card"], [class*="roster__item"]'):
+            name_el = card.select_one('[class*="player-name"], [class*="name"] a, a[href*="/roster/"], [class*="name"]')
             if not name_el:
                 continue
             c_name = clean_name(name_el.get_text(strip=True))
@@ -340,7 +324,7 @@ async def fetch_roster(context: BrowserContext, roster_url: str, label: str) -> 
             num = clean_number(jersey_el.get_text(strip=True)) if jersey_el else ""
             pos_el = card.select_one('[class*="position"]')
             pos = normalize_position(pos_el.get_text(strip=True)) if pos_el else ""
-            yr_el = card.select_one('[class*="year"], [class*="class"]')
+            yr_el = card.select_one('[class*="year"], [class*="class"], [class*="academic-year"]')
             yr = normalize_year(yr_el.get_text(strip=True)) if yr_el else ""
             _add_roster(roster_lookup, c_name, num, pos, yr)
 
@@ -419,7 +403,7 @@ def map_goalie_header(header_text: str) -> Optional[str]:
         return "min"
     return None
 
-# ── Table Parser Helpers ──────────────────────────────────────────────────────
+# ── New-Style Table Parser Helpers ───────────────────────────────────────────
 def parse_skaters_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     skaters: List[Dict[str, Any]] = []
     for table in soup.find_all("table"):
@@ -553,7 +537,6 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
     current_section = ""
 
     for table in soup.find_all("table"):
-        # Check table headers and sub-headers for section scope
         for row in table.find_all("tr"):
             th_cells = row.find_all("th")
             if th_cells:
@@ -582,7 +565,16 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
             val_home = cells[1].strip() if len(cells) > 1 else ""
             val_opp = cells[2].strip() if len(cells) > 2 else ""
 
-            # 1. Under Shots Group: Goals Per Game, Shot Percentage, Shots Per Game
+            # Check if row is a section divider inside tbody
+            if "power play" in label:
+                current_section = "POWER_PLAYS"
+            elif "penalt" in label:
+                current_section = "PENALTIES"
+            elif "faceoff" in label:
+                current_section = "FACEOFFS"
+            elif "shot" in label and len(cells) == 1:
+                current_section = "SHOTS"
+
             if current_section == "SHOTS":
                 if ("goals per game" in label or "goals/game" in label) and "goals_per_game" not in found:
                     found["goals_per_game"] = val_home
@@ -595,7 +587,6 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
                 elif ("shots per game" in label or "shots/game" in label) and "shots_per_game" not in found:
                     found["shots_per_game"] = val_home
 
-            # 2. Under Power Plays Group: Conversion Percentage (Home PP% and Opponent inverted PK%)
             elif current_section == "POWER_PLAYS":
                 if "conversion percentage" in label or "percentage" in label or "pp pct" in label:
                     if val_home and "pp_pct" not in found:
@@ -612,14 +603,12 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
                             pk_val = (1.0 - opp_float) * 100.0
                             found["pk_pct"] = f"{pk_val:.1f}%"
 
-            # 3. Under Penalties Group: Per Game and Minutes Per Game
             elif current_section == "PENALTIES":
                 if (label == "per game" or "pen/g" in label or "penalties per game" in label) and "pen_per_game" not in found:
                     found["pen_per_game"] = val_home
                 elif ("minutes per game" in label or "pim/g" in label or "minutes/game" in label) and "pim_per_game" not in found:
                     found["pim_per_game"] = val_home
 
-            # 4. Under Faceoffs Group: Percentage
             elif current_section == "FACEOFFS":
                 if ("percentage" in label or "pct" in label or "faceoff" in label) and "faceoff_pct" not in found:
                     f_val = _f(val_home)
@@ -635,28 +624,16 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
     return result
 
 # ══ OLD-STYLE (jQuery UI tabs) SIDEARM SUPPORT ═══════════════════════════════
-# Everything below this banner (up to "Finalize Player Dict") is used ONLY for
-# teams with style == "old". New-style code paths above/below are untouched.
-#
-# Old-style pages differ from new-style in three ways:
-#   * Player tables have a TWO-ROW grouped header (colspan/rowspan), e.g.
-#       Skaters : # | Player | GP | SHOTS(G A PTS SH SH% +/-) | GOALS(PPG..UAG) | PENALTIES(PN-PIM MIN MAJ OTH) | BLK
-#       Goalies : # | Player | GP-GS | MIN | Goals(GA AVG PPG SHG ENG) | Saves(SV SV%) | Record(W L T SHO)
-#   * Team stats section titles ("Shots", "Power Plays", ...) are single-cell
-#     <td> rows, not <th>.
-#   * Tabs are jQuery UI: <li role="tab" aria-controls="team"><a href="#team">.
 def _table_caption(table) -> str:
     cap = table.find("caption")
     return cap.get_text(" ", strip=True).lower() if cap else ""
 
 def _candidate_tables(soup: BeautifulSoup) -> List[Any]:
-    """All tables, minus 'Conference' duplicates when an Overall table exists."""
     tables = soup.find_all("table")
     non_conf = [t for t in tables if "conference" not in _table_caption(t)]
     return non_conf or tables
 
 def _header_row_list(table) -> List[Any]:
-    """Leading header rows: <thead> rows if present, else leading all-<th> rows."""
     thead = table.find("thead")
     if thead:
         rows = thead.find_all("tr")
@@ -676,12 +653,6 @@ def _header_row_list(table) -> List[Any]:
     return header_rows
 
 def build_header_labels(table) -> Tuple[List[str], List[Any]]:
-    """
-    Flatten a (possibly multi-row, colspan/rowspan) header into one label per
-    column. The bottom-most non-empty label wins, so group titles such as
-    "Shots"/"Goals"/"Penalties" are replaced by their child labels (G, A, ...).
-    Returns (labels, body_rows).
-    """
     header_rows = _header_row_list(table)
     grid: Dict[Tuple[int, int], str] = {}
     max_col = 0
@@ -725,7 +696,6 @@ def _grouped_mapping(table, mapper) -> Tuple[Dict[str, int], List[Any], int]:
         if f and f not in mapping:
             mapping[f] = idx
 
-    # Safety net: if header width != body width, right-align the header to the body.
     widths = [len(r.find_all(["td", "th"])) for r in body_rows if r.find_all(["td", "th"])]
     body_w = max(set(widths), key=widths.count) if widths else len(labels)
     if body_w != len(labels):
@@ -743,7 +713,6 @@ def parse_skaters_table_grouped(soup: BeautifulSoup) -> List[Dict[str, Any]]:
         mapping, body_rows, _ = _grouped_mapping(table, map_skater_header)
         if not ("g" in mapping and "pts" in mapping and "gp" in mapping):
             continue
-        # goalie tables never have G+PTS+GP together, but skip anything with GP-GS just in case
         name_idx = mapping.get("name", 1)
         num_idx = mapping.get("number", 0)
 
@@ -840,11 +809,9 @@ def _pct_str(raw: Any) -> Optional[str]:
     return f"{v:.1f}%"
 
 def _norm(text: Any) -> str:
-    """Lower-case and collapse ALL whitespace (including &nbsp;) to single spaces."""
     return " ".join(str(text).split()).lower()
 
 def _team_table_rows(soup: BeautifulSoup) -> List[List[str]]:
-    """Rows of the first team table (normalized cell text), preferring 'Overall Team'."""
     tables = soup.find_all("table")
     ordered = [t for t in tables if "team" in _table_caption(t) and "conference" not in _table_caption(t)]
     ordered += [t for t in tables if not any(t is o for o in ordered)]
@@ -857,13 +824,6 @@ def _team_table_rows(soup: BeautifulSoup) -> List[List[str]]:
     return []
 
 def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
-    """
-    Old-style Team tab: rows are [label, team value, opponent value] grouped under
-    section title rows (Shots / Power Plays / Goal Breakdown / Penalties / Faceoffs).
-    Values like .111 / .231 are decimals. Section titles are detected by name, and
-    if the page's markup hides them, by anchor rows (Goals-Shots, Goals-Opportunities,
-    Hat Tricks, Won-Lost).
-    """
     found: Dict[str, str] = {}
     section = ""
     pending_pen = False
@@ -881,7 +841,6 @@ def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
         if len(cells) < 2:
             continue
 
-        # Anchor rows (fallback section detection)
         if n0 == "goals-shots":
             section = "SHOTS"
         elif n0 == "goals-opportunities":
@@ -922,7 +881,6 @@ def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
                         found["pk_pct"] = f"{(1.0 - opp) * 100.0:.1f}%"
 
         elif section == "PENALTIES":
-            # Label cell can hold two spans, e.g. "Per Game PN/AVG", so match loosely.
             if "per game" in n0 and "minute" not in n0 and "pen_per_game" not in found and team_val:
                 found["pen_per_game"] = team_val
             elif "minutes per game" in n0 and "pim_per_game" not in found and team_val:
@@ -936,23 +894,7 @@ def parse_team_stats_old(soup: BeautifulSoup) -> Dict[str, str]:
 
     return {k: found.get(k, "-") for k in TEAM_STAT_KEYS}
 
-def team_debug_dump(soup: BeautifulSoup, max_rows: int = 60) -> str:
-    """Compact text description of the page's tables, for the Actions log."""
-    lines = [f"tables on page: {len(soup.find_all('table'))}"]
-    for i, t in enumerate(soup.find_all("table")[:12]):
-        lines.append(f"  table[{i}] caption={_table_caption(t)!r} rows={len(t.find_all('tr'))}")
-    rows = _team_table_rows(soup)
-    if not rows:
-        lines.append("no table containing team-stat labels was found")
-    for r in rows[:max_rows]:
-        lines.append("  " + repr(r))
-    return "\n".join(lines)
-
 async def _ensure_ui_tab(page: Page, panel_id: str) -> bool:
-    """
-    Make a jQuery-UI tab active and confirm it, e.g. for the Team tab:
-      <li role="tab" aria-controls="team" aria-selected="true"><a href="#team">Team</a></li>
-    """
     tab = page.locator(f'li[role="tab"][aria-controls="{panel_id}"]').first
     try:
         if await tab.count() == 0:
@@ -962,7 +904,7 @@ async def _ensure_ui_tab(page: Page, panel_id: str) -> bool:
             try:
                 await link.click(timeout=3000)
             except Exception:
-                await link.evaluate("el => el.click()")  # e.g. cookie banner in the way
+                await link.evaluate("el => el.click()")
             await page.wait_for_timeout(600)
         return (await tab.get_attribute("aria-selected")) == "true"
     except Exception as e:
@@ -1006,17 +948,17 @@ def finalize_player(p: Dict[str, Any]) -> Dict[str, str]:
 
     return record
 
-# ── Scrape Single Team Pipeline (Playwright DOM Driven) ──────────────────────
-async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], semaphore: asyncio.Semaphore) -> Dict[str, Any]:
+# ── Scrape Single Team Pipeline: NEW STYLE (Vue/Nuxt dropdowns) ──────────────
+async def scrape_single_team_new_style(context: BrowserContext, team_cfg: Dict[str, Any], semaphore: asyncio.Semaphore) -> Dict[str, Any]:
     async with semaphore:
         slug, label = team_cfg["slug"], team_cfg["name"]
-        logger.info(f"Processing {label} (Men's Hockey)...")
+        logger.info(f"Processing {label} (Men's Hockey, new style)...")
 
         roster_lookup = await fetch_roster(context, team_cfg.get("roster_url", ""), label)
 
         raw_players: List[Dict[str, Any]] = []
         team_stats: Dict[str, str] = {}
-        style = "HTML tables"
+        style = "New Style (Sidearm Nuxt/Vue)"
 
         page: Optional[Page] = None
         try:
@@ -1027,13 +969,13 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             except Exception:
                 pass
 
-            # 1. Parse Skaters Table (Default Active View: Player Stats -> Overall -> Skaters)
+            # 1. Parse Skaters Table (Default Active View)
             html_skaters = await page.content()
             soup_skaters = BeautifulSoup(html_skaters, "html.parser")
             skaters_list = parse_skaters_table(soup_skaters)
             raw_players.extend(skaters_list)
 
-            # 2. Switch Dropdown to Goaltenders (New Style Vue/Nuxt)
+            # 2. Switch Dropdown to Goaltenders
             try:
                 select_box = page.locator('button[data-test-id="s-select__box"]').filter(has_text=re.compile(r"Skaters|Goaltenders", re.I)).first
                 if await select_box.count() > 0:
@@ -1047,16 +989,14 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
                         soup_goalies = BeautifulSoup(html_goalies, "html.parser")
                         goalies_list = parse_goalies_table(soup_goalies)
                         raw_players.extend(goalies_list)
-                        style = "New Style (Vue dropdowns)"
             except Exception as e:
                 logger.debug(f"[{label}] Goaltenders dropdown interaction: {e}")
 
-            # If no goalies were found from dropdown, check initial page (Old Style)
             if not any(p.get("is_goalie") for p in raw_players):
                 goalies_list = parse_goalies_table(soup_skaters)
                 raw_players.extend(goalies_list)
 
-            # 3. Navigate to Team Stats Tab (New Style)
+            # 3. Navigate to Team Stats Tab
             try:
                 team_stats_tab = page.locator('button[data-test-id="s-tab__link"], button[role="tab"]').filter(has_text=re.compile(r"Team Stats", re.I)).first
                 if await team_stats_tab.count() > 0:
@@ -1070,7 +1010,6 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             except Exception as e:
                 logger.debug(f"[{label}] Team Stats tab navigation: {e}")
 
-            # Fallback to initial page soup if Team Stats tab was not clicked
             if not team_stats or all(v == "-" for v in team_stats.values()):
                 team_stats = parse_team_stats(soup_skaters)
 
@@ -1080,7 +1019,7 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             if page:
                 await page.close()
 
-        # Strict Roster Merge and Player Finalization
+        # Strict Roster Merge
         merged: List[Dict[str, str]] = []
         seen = set()
 
@@ -1090,7 +1029,6 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
                 continue
 
             r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
-
             if roster_lookup and len(roster_lookup) >= MIN_ROSTER_ENTRIES and not r_info:
                 continue
 
@@ -1118,10 +1056,8 @@ async def scrape_single_team(context: BrowserContext, team_cfg: Dict[str, Any], 
             "players": merged,
         }
 
-        # Exclusively write to docs/<slug>.json
         os.makedirs("docs", exist_ok=True)
-        doc_path = os.path.join("docs", f"{slug}.json")
-        with open(doc_path, "w", encoding="utf-8") as f:
+        with open(os.path.join("docs", f"{slug}.json"), "w", encoding="utf-8") as f:
             json.dump(team_data, f, indent=2)
 
         return team_data
@@ -1146,7 +1082,7 @@ async def scrape_single_team_old_style(context: BrowserContext, team_cfg: Dict[s
             except Exception:
                 pass
 
-            # 1. Team tab: confirm <li role="tab" aria-controls="team" aria-selected="true">
+            # 1. Team tab
             if not await _ensure_ui_tab(page, "team"):
                 logger.warning(f"[{label}] Could not confirm Team tab is selected; parsing DOM anyway.")
             soup_team = BeautifulSoup(await page.content(), "html.parser")
@@ -1161,29 +1097,18 @@ async def scrape_single_team_old_style(context: BrowserContext, team_cfg: Dict[s
 
             # 3. Individual -> Overall -> Goaltenders
             await _ensure_ui_tab(page, "individual-overall-goaltenders")
-            html_gk = await page.content()
-            soup_gk = BeautifulSoup(html_gk, "html.parser")
+            soup_gk = BeautifulSoup(await page.content(), "html.parser")
             goalies = parse_goalies_table_grouped(soup_gk)
 
-            # Goalies also appear (zero-filled) in the Skaters grid, so goalies go FIRST
-            # and win the name de-duplication in the merge step below.
             raw_players.extend(goalies)
             raw_players.extend(skaters)
 
-            if not goalies:
-                logger.warning(f"[{label}] No goalies parsed from Goaltenders table.")
-            if all(v == "-" for v in team_stats.values()):
-                logger.warning(f"[{label}] No team stats parsed. Team tab table dump:\n{team_debug_dump(soup_team)}")
-                os.makedirs("debug", exist_ok=True)
-                with open(os.path.join("debug", f"{slug}_team.html"), "w", encoding="utf-8") as f:
-                    f.write(str(soup_team))
         except Exception as e:
             logger.error(f"[{label}] Error navigating stats page: {e}")
         finally:
             if page:
                 await page.close()
 
-        # Roster merge + finalize (same rules as new style)
         merged: List[Dict[str, str]] = []
         seen = set()
         for sp in raw_players:
@@ -1221,11 +1146,99 @@ async def scrape_single_team_old_style(context: BrowserContext, team_cfg: Dict[s
             json.dump(team_data, f, indent=2)
         return team_data
 
+# ── Scrape Single Team Pipeline: ARIZONA STATE (WMT Digital) ─────────────────
+async def scrape_single_team_asu_wmt(context: BrowserContext, team_cfg: Dict[str, Any], semaphore: asyncio.Semaphore) -> Dict[str, Any]:
+    async with semaphore:
+        slug, label = team_cfg["slug"], team_cfg["name"]
+        logger.info(f"Processing {label} (Men's Hockey, ASU WMT Digital)...")
+
+        roster_lookup = await fetch_roster(context, team_cfg.get("roster_url", ""), label)
+
+        raw_players: List[Dict[str, Any]] = []
+        team_stats: Dict[str, str] = {k: "-" for k in TEAM_STAT_KEYS}
+
+        page: Optional[Page] = None
+        try:
+            page = await context.new_page()
+            await page.goto(team_cfg["stats_url"], wait_until="domcontentloaded", timeout=30000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=4000)
+            except Exception:
+                pass
+
+            html = await page.content()
+            soup = BeautifulSoup(html, "html.parser")
+
+            # 1. Parse Pre-Rendered Skaters Table
+            skaters = parse_skaters_table(soup)
+            if not skaters:
+                skaters = parse_skaters_table_grouped(soup)
+
+            # 2. Parse Pre-Rendered Goaltenders Table
+            goalies = parse_goalies_table(soup)
+            if not goalies:
+                goalies = parse_goalies_table_grouped(soup)
+
+            # Goalies first to ensure proper position tag win during de-duplication
+            raw_players.extend(goalies)
+            raw_players.extend(skaters)
+
+            # 3. Parse Team Cumulative Stats Table
+            team_stats = parse_team_stats(soup)
+            if all(v == "-" for v in team_stats.values()):
+                team_stats = parse_team_stats_old(soup)
+
+        except Exception as e:
+            logger.error(f"[{label}] Error navigating stats page: {e}")
+        finally:
+            if page:
+                await page.close()
+
+        merged: List[Dict[str, str]] = []
+        seen = set()
+        for sp in raw_players:
+            name = sp.get("name", "")
+            if not name or name.lower() in seen or not is_valid_player_candidate(name):
+                continue
+            r_info = find_roster_entry(name, sp.get("number", ""), roster_lookup)
+            if roster_lookup and len(roster_lookup) >= MIN_ROSTER_ENTRIES and not r_info:
+                continue
+            seen.add(name.lower())
+            p = dict(sp)
+            if r_info:
+                p["name"] = r_info.get("name") or name
+                p["number"] = sp.get("number") or r_info.get("number", "")
+                p["position"] = "G" if sp.get("is_goalie") else (r_info.get("position") or sp.get("position", "F"))
+                p["year"] = r_info.get("year") or sp.get("year", "")
+            merged.append(finalize_player(p))
+
+        team_data: Dict[str, Any] = {
+            "team": label,
+            "slug": slug,
+            "gender": "men",
+            "sport": "hockey",
+            "conference": "NCHC" if "non_conf" not in slug else "Non-Conference",
+            "generated_at": now_iso(),
+            "source_stats_url": team_cfg["stats_url"],
+            "source_roster_url": team_cfg.get("roster_url", ""),
+            "site_style": "WMT Digital (Static DOM)",
+            "team_stats": team_stats,
+            "players": merged,
+        }
+
+        os.makedirs("docs", exist_ok=True)
+        with open(os.path.join("docs", f"{slug}.json"), "w", encoding="utf-8") as f:
+            json.dump(team_data, f, indent=2)
+        return team_data
+
+# ── Router Dispatcher ────────────────────────────────────────────────────────
 async def scrape_team(context: BrowserContext, team_cfg: Dict[str, Any], semaphore: asyncio.Semaphore) -> Dict[str, Any]:
-    """Route each team to its pipeline. New-style pipeline is unchanged."""
-    if team_cfg.get("style") == "old":
+    style = team_cfg.get("style", "new")
+    if style == "old":
         return await scrape_single_team_old_style(context, team_cfg, semaphore)
-    return await scrape_single_team(context, team_cfg, semaphore)
+    elif style == "asu":
+        return await scrape_single_team_asu_wmt(context, team_cfg, semaphore)
+    return await scrape_single_team_new_style(context, team_cfg, semaphore)
 
 # ── Main Runner ──────────────────────────────────────────────────────────────
 async def run_scraper(only: Optional[List[str]], debug: bool) -> None:
@@ -1260,7 +1273,7 @@ async def run_scraper(only: Optional[List[str]], debug: bool) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="NCHC Men's Hockey stats scraper")
-    ap.add_argument("--only", help='Comma-separated team names/slugs, e.g. "St. Thomas,Denver"')
+    ap.add_argument("--only", help='Comma-separated team names/slugs, e.g. "St. Thomas,Denver,Arizona State"')
     ap.add_argument("--debug", action="store_true", help="Debug mode")
     args = ap.parse_args()
     asyncio.run(run_scraper(args.only.split(",") if args.only else None, args.debug))
