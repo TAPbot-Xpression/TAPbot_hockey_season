@@ -6,7 +6,7 @@ NCHC Men's Hockey player season stats + team stats scraper.
 Supports:
 1. New-Style Sidearm (Vue/Nuxt dropdowns + Tab buttons, e.g., St. Thomas, Denver, Omaha, Miami, St. Cloud State)
 2. Old-Style Sidearm (jQuery UI tabs with grouped table headers, e.g., Colorado College, North Dakota, UMD, Western Michigan)
-3. Arizona State WMT Digital layout (thesundevils.com, static pre-rendered DOM tables)
+3. Arizona State (thesundevils.com, WMT Digital layout with .stats-table__row and comparison-label)
 4. Non-Conference opponent (non_conf_config.json -> docs/non_conf_mhockey.json)
 
 Output:
@@ -218,6 +218,14 @@ def _f(x: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
+
+def _pct_str(raw: Any) -> Optional[str]:
+    v = _f(raw)
+    if v is None:
+        return None
+    if v <= 1.0:
+        v *= 100.0
+    return f"{v:.1f}%"
 
 def is_valid_player_candidate(name: str) -> bool:
     if not name or len(name) < 3:
@@ -531,7 +539,7 @@ def parse_goalies_table(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
     return goalies
 
-# ── Section-Scoped Team Stats Parser ─────────────────────────────────────────
+# ── Section-Scoped Team Stats Parser (Sidearm) ───────────────────────────────
 def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
     found: Dict[str, str] = {}
     current_section = ""
@@ -565,7 +573,6 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
             val_home = cells[1].strip() if len(cells) > 1 else ""
             val_opp = cells[2].strip() if len(cells) > 2 else ""
 
-            # Check if row is a section divider inside tbody
             if "power play" in label:
                 current_section = "POWER_PLAYS"
             elif "penalt" in label:
@@ -579,22 +586,18 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
                 if ("goals per game" in label or "goals/game" in label) and "goals_per_game" not in found:
                     found["goals_per_game"] = val_home
                 elif ("shot percentage" in label or "shot pct" in label or "shot %" in label) and "shot_pct" not in found:
-                    s_val = _f(val_home)
-                    if s_val is not None:
-                        if s_val <= 1.0:
-                            s_val *= 100.0
-                        found["shot_pct"] = f"{s_val:.1f}%"
+                    v = _pct_str(val_home)
+                    if v:
+                        found["shot_pct"] = v
                 elif ("shots per game" in label or "shots/game" in label) and "shots_per_game" not in found:
                     found["shots_per_game"] = val_home
 
             elif current_section == "POWER_PLAYS":
                 if "conversion percentage" in label or "percentage" in label or "pp pct" in label:
                     if val_home and "pp_pct" not in found:
-                        pp_val = _f(val_home)
-                        if pp_val is not None:
-                            if pp_val <= 1.0:
-                                pp_val *= 100.0
-                            found["pp_pct"] = f"{pp_val:.1f}%"
+                        v = _pct_str(val_home)
+                        if v:
+                            found["pp_pct"] = v
                     if val_opp and "pk_pct" not in found:
                         opp_float = _f(val_opp)
                         if opp_float is not None:
@@ -611,17 +614,95 @@ def parse_team_stats(soup: BeautifulSoup) -> Dict[str, str]:
 
             elif current_section == "FACEOFFS":
                 if ("percentage" in label or "pct" in label or "faceoff" in label) and "faceoff_pct" not in found:
-                    f_val = _f(val_home)
-                    if f_val is not None:
-                        if f_val <= 1.0:
-                            f_val *= 100.0
-                        found["faceoff_pct"] = f"{f_val:.1f}%"
+                    v = _pct_str(val_home)
+                    if v:
+                        found["faceoff_pct"] = v
 
     result: Dict[str, str] = {}
     for k in TEAM_STAT_KEYS:
         result[k] = found.get(k, "-")
 
     return result
+
+# ── Arizona State (WMT Digital) Specific Team Stats Parser ───────────────────
+def parse_team_stats_asu_wmt(soup: BeautifulSoup) -> Dict[str, str]:
+    found: Dict[str, str] = {}
+    current_section = ""
+
+    # Look for WMT table rows (class="stats-table__row" or standard <tr>)
+    rows = soup.find_all("tr")
+    for r in rows:
+        label_el = r.select_one(".stats-table__comparison-label, .body-cell--sticky, th, td:first-child")
+        if not label_el:
+            continue
+
+        label_text = " ".join(label_el.get_text(" ", strip=True).split())
+        label_clean = label_text.lower()
+
+        # Check section boundaries
+        if "shot" in label_clean and len(r.find_all("td")) <= 1:
+            current_section = "SHOTS"
+            continue
+        elif "power play" in label_clean and len(r.find_all("td")) <= 1:
+            current_section = "POWER_PLAYS"
+            continue
+        elif "penalt" in label_clean and len(r.find_all("td")) <= 1:
+            current_section = "PENALTIES"
+            continue
+        elif "faceoff" in label_clean and len(r.find_all("td")) <= 1:
+            current_section = "FACEOFFS"
+            continue
+
+        cells = [c.get_text(" ", strip=True) for c in r.find_all("td")]
+        if len(cells) < 2:
+            continue
+
+        val_home = cells[1].strip() if len(cells) > 1 else ""
+        val_opp = cells[2].strip() if len(cells) > 2 else ""
+
+        # 1. Goals Per Game
+        if "goals per game" in label_clean and "goals_per_game" not in found and val_home:
+            found["goals_per_game"] = val_home
+
+        # 2. Shots Per Game
+        elif "shots per game" in label_clean and "shots_per_game" not in found and val_home:
+            found["shots_per_game"] = val_home
+
+        # 3. Shot Percentage
+        elif ("shot percentage" in label_clean or "shot %" in label_clean) and "shot_pct" not in found and val_home:
+            v = _pct_str(val_home)
+            if v:
+                found["shot_pct"] = v
+
+        # 4. Power Play Percentage & Inverted Penalty Kill Percentage
+        elif ("power play percentage" in label_clean or "conversion percentage" in label_clean) and "pp_pct" not in found:
+            if val_home:
+                v = _pct_str(val_home)
+                if v:
+                    found["pp_pct"] = v
+            if val_opp and "pk_pct" not in found:
+                opp_f = _f(val_opp)
+                if opp_f is not None:
+                    if opp_f > 1.0:
+                        opp_f /= 100.0
+                    pk_val = (1.0 - opp_f) * 100.0
+                    found["pk_pct"] = f"{pk_val:.1f}%"
+
+        # 5. Penalties Per Game
+        elif ("penalties per game" in label_clean or (label_clean == "per game" and current_section == "PENALTIES")) and "pen_per_game" not in found and val_home:
+            found["pen_per_game"] = val_home
+
+        # 6. Penalty Minutes Per Game (PIM/G)
+        elif ("penalty minutes per game" in label_clean or "minutes per game" in label_clean or "pim/g" in label_clean) and "pim_per_game" not in found and val_home:
+            found["pim_per_game"] = val_home
+
+        # 7. Faceoff Win Percentage
+        elif ("percentage" in label_clean or "faceoff" in label_clean) and "faceoff_pct" not in found and val_home:
+            v = _pct_str(val_home)
+            if v:
+                found["faceoff_pct"] = v
+
+    return {k: found.get(k, "-") for k in TEAM_STAT_KEYS}
 
 # ══ OLD-STYLE (jQuery UI tabs) SIDEARM SUPPORT ═══════════════════════════════
 def _table_caption(table) -> str:
@@ -799,14 +880,6 @@ _OLD_SECTIONS = {
     "faceoffs": "FACEOFFS", "faceoff": "FACEOFFS",
     "goal breakdown": "GOALS",
 }
-
-def _pct_str(raw: Any) -> Optional[str]:
-    v = _f(raw)
-    if v is None:
-        return None
-    if v <= 1.0:
-        v *= 100.0
-    return f"{v:.1f}%"
 
 def _norm(text: Any) -> str:
     return " ".join(str(text).split()).lower()
@@ -1161,8 +1234,11 @@ async def scrape_single_team_asu_wmt(context: BrowserContext, team_cfg: Dict[str
         try:
             page = await context.new_page()
             await page.goto(team_cfg["stats_url"], wait_until="domcontentloaded", timeout=30000)
+            
+            # Allow WMT dynamic tables to mount in DOM
             try:
-                await page.wait_for_load_state("networkidle", timeout=4000)
+                await page.wait_for_selector(".stats-table__row, table", timeout=8000)
+                await page.wait_for_load_state("networkidle", timeout=3000)
             except Exception:
                 pass
 
@@ -1179,14 +1255,13 @@ async def scrape_single_team_asu_wmt(context: BrowserContext, team_cfg: Dict[str
             if not goalies:
                 goalies = parse_goalies_table_grouped(soup)
 
-            # Goalies first to ensure proper position tag win during de-duplication
             raw_players.extend(goalies)
             raw_players.extend(skaters)
 
-            # 3. Parse Team Cumulative Stats Table
-            team_stats = parse_team_stats(soup)
+            # 3. Parse Team Cumulative Stats Table using WMT layout parser
+            team_stats = parse_team_stats_asu_wmt(soup)
             if all(v == "-" for v in team_stats.values()):
-                team_stats = parse_team_stats_old(soup)
+                team_stats = parse_team_stats(soup)
 
         except Exception as e:
             logger.error(f"[{label}] Error navigating stats page: {e}")
@@ -1275,7 +1350,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="NCHC Men's Hockey stats scraper")
     ap.add_argument("--only", help='Comma-separated team names/slugs, e.g. "St. Thomas,Denver,Arizona State"')
     ap.add_argument("--debug", action="store_true", help="Debug mode")
-    args = ap.parse_args()
+    args = args = ap.parse_args()
     asyncio.run(run_scraper(args.only.split(",") if args.only else None, args.debug))
 
 if __name__ == "__main__":
