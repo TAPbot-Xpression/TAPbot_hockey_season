@@ -4,10 +4,10 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-21T09:46:12Z",
+  "generated_at": "2026-11-22T02:31:19Z",
   "source_stats_url": "https://omahamavs.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://omahamavs.com/sports/mens-ice-hockey/roster/print",
-  "site_style": "New Style (Vue dropdowns)",
+  "site_style": "New Style (Sidearm Nuxt/Vue)",
   "team_stats": {
     "goals_per_game": "3.0",
     "shots_per_game": "28.0",
@@ -139,6 +139,23 @@
       "pn_pim": "2-4"
     },
     {
+      "number": "42",
+      "name": "Vincent Desjardins",
+      "position": "F",
+      "year": "FR",
+      "is_goalie": "false",
+      "gp": "11",
+      "g": "3",
+      "a": "2",
+      "pts": "5",
+      "sh": "23",
+      "blk": "10",
+      "ppg": "0",
+      "shg": "0",
+      "gwg": "1",
+      "pn_pim": "2-4"
+    },
+    {
       "number": "39",
       "name": "Ma\u00ebl Lavigne",
       "position": "F",
@@ -188,23 +205,6 @@
       "shg": "0",
       "gwg": "0",
       "pn_pim": "7-22"
-    },
-    {
-      "number": "42",
-      "name": "Vincent Desjardins",
-      "position": "F",
-      "year": "FR",
-      "is_goalie": "false",
-      "gp": "11",
-      "g": "3",
-      "a": "1",
-      "pts": "4",
-      "sh": "23",
-      "blk": "10",
-      "ppg": "0",
-      "shg": "0",
-      "gwg": "1",
-      "pn_pim": "2-4"
     },
     {
       "number": "7",
@@ -275,6 +275,23 @@
       "pn_pim": "1-2"
     },
     {
+      "number": "3",
+      "name": "Jayden Jubenvill",
+      "position": "D",
+      "year": "JR",
+      "is_goalie": "false",
+      "gp": "11",
+      "g": "0",
+      "a": "3",
+      "pts": "3",
+      "sh": "12",
+      "blk": "8",
+      "ppg": "0",
+      "shg": "0",
+      "gwg": "0",
+      "pn_pim": "3-6"
+    },
+    {
       "number": "44",
       "name": "Spencer Sova",
       "position": "D",
@@ -307,23 +324,6 @@
       "shg": "1",
       "gwg": "0",
       "pn_pim": "1-2"
-    },
-    {
-      "number": "3",
-      "name": "Jayden Jubenvill",
-      "position": "D",
-      "year": "JR",
-      "is_goalie": "false",
-      "gp": "11",
-      "g": "0",
-      "a": "2",
-      "pts": "2",
-      "sh": "12",
-      "blk": "8",
-      "ppg": "0",
-      "shg": "0",
-      "gwg": "0",
-      "pn_pim": "3-6"
     },
     {
       "number": "9",

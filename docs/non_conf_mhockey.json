@@ -4,21 +4,36 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "Non-Conference",
-  "generated_at": "2026-11-21T09:46:11Z",
+  "generated_at": "2026-11-22T02:31:18Z",
   "source_stats_url": "https://bsubeavers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://bsubeavers.com/sports/mens-ice-hockey/roster?print=true",
-  "site_style": "HTML tables",
+  "site_style": "New Style (Sidearm Nuxt/Vue)",
   "team_stats": {
     "goals_per_game": "-",
     "shots_per_game": "-",
     "shot_pct": "-",
-    "pp_pct": "-",
-    "pk_pct": "-",
+    "pp_pct": "48.3%",
+    "pk_pct": "48.3%",
     "pen_per_game": "-",
     "pim_per_game": "-",
     "faceoff_pct": "-"
   },
   "players": [
+    {
+      "number": "35",
+      "name": "Raythan Robbins",
+      "position": "G",
+      "year": "SR",
+      "is_goalie": "true",
+      "gp_gs": "4-3",
+      "ga": "0",
+      "gaa": "0.00",
+      "sv": "3",
+      "sv_pct": ".000",
+      "sho": "0",
+      "w_l_t": "5",
+      "min": "225:25"
+    },
     {
       "number": "1",
       "name": "Max Hildebrand",
@@ -33,36 +48,6 @@
       "sho": "0",
       "w_l_t": "6",
       "min": "557:37"
-    },
-    {
-      "number": "35",
-      "name": "Raythan Robbins",
-      "position": "G",
-      "year": "SR",
-      "is_goalie": "true",
-      "gp_gs": "4-2",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "3",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "4",
-      "min": "168:39"
-    },
-    {
-      "number": "30",
-      "name": "Trent Wiemken",
-      "position": "G",
-      "year": "JR",
-      "is_goalie": "true",
-      "gp_gs": "1-0",
-      "ga": "0",
-      "gaa": "0.00",
-      "sv": "0",
-      "sv_pct": ".000",
-      "sho": "0",
-      "w_l_t": "0",
-      "min": "00:00"
     }
   ]
 }

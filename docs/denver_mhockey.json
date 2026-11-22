@@ -4,10 +4,10 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-21T09:45:59Z",
+  "generated_at": "2026-11-22T02:31:04Z",
   "source_stats_url": "https://denverpioneers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://denverpioneers.com/sports/mens-ice-hockey/roster/print",
-  "site_style": "New Style (Vue dropdowns)",
+  "site_style": "New Style (Sidearm Nuxt/Vue)",
   "team_stats": {
     "goals_per_game": "3.7",
     "shots_per_game": "35.2",

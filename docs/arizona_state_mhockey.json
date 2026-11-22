@@ -4,10 +4,10 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "NCHC",
-  "generated_at": "2026-11-21T09:45:56Z",
+  "generated_at": "2026-11-22T02:30:56Z",
   "source_stats_url": "https://thesundevils.com/sports/ice-hockey/stats",
-  "source_roster_url": "https://thesundevils.com/sports/ice-hockey/roster?view=list",
-  "site_style": "HTML tables",
+  "source_roster_url": "https://thesundevils.com/sports/ice-hockey/roster?view=table",
+  "site_style": "WMT Digital (Static DOM)",
   "team_stats": {
     "goals_per_game": "-",
     "shots_per_game": "-",
