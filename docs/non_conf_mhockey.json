@@ -4,7 +4,7 @@
   "gender": "men",
   "sport": "hockey",
   "conference": "Non-Conference",
-  "generated_at": "2026-11-25T10:07:21Z",
+  "generated_at": "2026-11-26T18:54:37Z",
   "source_stats_url": "https://bsubeavers.com/sports/mens-ice-hockey/stats/2026-27",
   "source_roster_url": "https://bsubeavers.com/sports/mens-ice-hockey/roster?print=true",
   "site_style": "New Style (Sidearm Nuxt/Vue)",
@@ -12,8 +12,8 @@
     "goals_per_game": "-",
     "shots_per_game": "-",
     "shot_pct": "-",
-    "pp_pct": "48.3%",
-    "pk_pct": "48.3%",
+    "pp_pct": "47.9%",
+    "pk_pct": "47.9%",
     "pen_per_game": "-",
     "pim_per_game": "-",
     "faceoff_pct": "-"
@@ -40,14 +40,14 @@
       "position": "G",
       "year": "SO",
       "is_goalie": "true",
-      "gp_gs": "10-10",
+      "gp_gs": "11-11",
       "ga": "0",
       "gaa": "0.00",
       "sv": "3",
       "sv_pct": ".000",
       "sho": "0",
-      "w_l_t": "6",
-      "min": "557:37"
+      "w_l_t": "7",
+      "min": "615:41"
     }
   ]
 }
